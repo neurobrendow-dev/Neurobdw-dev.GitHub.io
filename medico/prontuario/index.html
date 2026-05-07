@@ -520,6 +520,28 @@ let currentPatient = null;
 let currentHistory = null;
 let currentConsults = [];
 let currentDocs = [];
+let customExamGroups = [];   // grupos salvos pelo médico (Supabase)
+
+function getAllExamGroups() {
+  const builtin = (window.EXAM_GROUPS || []).map(g => ({ ...g, custom: false }));
+  const custom = customExamGroups.map(g => ({
+    name: g.name, exams: g.exams || [], id: g.id, custom: true
+  }));
+  return [...builtin, ...custom];
+}
+
+async function loadCustomExamGroups() {
+  const { data, error } = await sb
+    .from('emr_exam_groups')
+    .select('*')
+    .order('name', { ascending: true });
+  if (error) {
+    console.warn('emr_exam_groups indisponível (rode supabase-migration-prontuario-extras.sql):', error.message);
+    customExamGroups = [];
+    return;
+  }
+  customExamGroups = data || [];
+}
 
 /* ===========================================================
    CID-10 — carregada de cid10.js (window.CID10)
@@ -622,14 +644,16 @@ async function onSignedIn(user) {
   currentProfile = profile;
   $('topbar-actions').innerHTML = `
     <a class="btn-link" href="/medico/">← Diário de cefaleia</a>
+    <button class="btn-link" id="btn-ai-config" title="Configurar IA">⚙ IA</button>
     <span class="topbar-user">Dr(a). ${escapeHtml(profile.full_name.split(' ')[0])}</span>
     <button class="btn-link" id="btn-logout">Sair</button>
   `;
+  $('btn-ai-config').onclick = openAIConfig;
   $('btn-logout').onclick = async () => { await sb.auth.signOut(); };
 
   hide('view-loading');
   show('view-patients');
-  await loadPatients();
+  await Promise.all([loadPatients(), loadCustomExamGroups()]);
 }
 
 /* ===========================================================
@@ -1066,20 +1090,28 @@ function openConsultForm(c) {
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>História da doença atual (HDA)</label>
+            <label>História da doença atual (HDA)
+              <button type="button" class="btn-ghost ai-btn" data-ai="hda" style="float:right;font-size:0.7rem;">✨ Organizar com IA</button>
+            </label>
             <textarea name="hda" style="min-height:120px;">${escapeHtml(data.hda || '')}</textarea>
           </div>
         </div>
         <div class="form-row cols-2">
           <div class="form-group">
             <label>Exame físico geral
-              <button type="button" class="btn-ghost" data-tpl="phys" style="float:right;font-size:0.7rem;">+ Normal</button>
+              <span style="float:right;">
+                <button type="button" class="btn-ghost ai-btn" data-ai="physical_exam" style="font-size:0.7rem;">✨ IA</button>
+                <button type="button" class="btn-ghost" data-tpl="phys" style="font-size:0.7rem;">+ Normal</button>
+              </span>
             </label>
             <textarea name="physical_exam" style="min-height:110px;">${escapeHtml(data.physical_exam || '')}</textarea>
           </div>
           <div class="form-group">
             <label>Exame neurológico
-              <button type="button" class="btn-ghost" data-tpl="neuro" style="float:right;font-size:0.7rem;">+ Normal</button>
+              <span style="float:right;">
+                <button type="button" class="btn-ghost ai-btn" data-ai="neuro_exam" style="font-size:0.7rem;">✨ IA</button>
+                <button type="button" class="btn-ghost" data-tpl="neuro" style="font-size:0.7rem;">+ Normal</button>
+              </span>
             </label>
             <textarea name="neuro_exam" style="min-height:110px;">${escapeHtml(data.neuro_exam || '')}</textarea>
           </div>
@@ -1091,7 +1123,9 @@ function openConsultForm(c) {
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Hipótese diagnóstica</label>
+            <label>Hipótese diagnóstica
+              <button type="button" class="btn-ghost ai-btn" data-ai="hypothesis" style="float:right;font-size:0.7rem;">✨ IA</button>
+            </label>
             <textarea name="hypothesis">${escapeHtml(data.hypothesis || '')}</textarea>
           </div>
         </div>
@@ -1107,13 +1141,17 @@ function openConsultForm(c) {
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Conduta / plano terapêutico</label>
+            <label>Conduta / plano terapêutico
+              <button type="button" class="btn-ghost ai-btn" data-ai="plan" style="float:right;font-size:0.7rem;">✨ IA</button>
+            </label>
             <textarea name="plan" style="min-height:110px;">${escapeHtml(data.plan || '')}</textarea>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label>Observações</label>
+            <label>Observações
+              <button type="button" class="btn-ghost ai-btn" data-ai="notes" style="float:right;font-size:0.7rem;">✨ IA</button>
+            </label>
             <textarea name="notes">${escapeHtml(data.notes || '')}</textarea>
           </div>
         </div>
@@ -1162,6 +1200,17 @@ function openConsultForm(c) {
         ta.value = (ta.value ? ta.value + '\n\n' : '') + txt;
       });
 
+      // botões IA — organizar texto do campo
+      modal.querySelectorAll('.ai-btn').forEach(b => {
+        b.onclick = () => {
+          const fieldName = b.dataset.ai;
+          const ta = modal.querySelector(`textarea[name="${fieldName}"]`);
+          if (!ta) return;
+          if (!ta.value.trim()) { alert('Digite algo no campo antes de pedir para a IA organizar.'); return; }
+          organizeWithAI(ta.value, fieldName, (newText) => { ta.value = newText; });
+        };
+      });
+
       modal.querySelector('#btn-save-consult').onclick = async () => {
         const f = modal.querySelector('#form-consult');
         if (!f.reportValidity()) return;
@@ -1198,6 +1247,7 @@ function openScalesPicker(onApply) {
   const items = [
     { key:'phq9',    title:'PHQ-9',    desc:'Rastreio e gravidade de depressão (9 itens)' },
     { key:'gad7',    title:'GAD-7',    desc:'Rastreio e gravidade de ansiedade (7 itens)' },
+    { key:'gds15',   title:'GDS-15',   desc:'Escala de depressão geriátrica (Yesavage, 15 itens)' },
     { key:'epworth', title:'Epworth',  desc:'Sonolência diurna excessiva (8 situações)' },
     { key:'meem',    title:'MEEM',     desc:'Mini-Exame do Estado Mental (Folstein, 30 pts)' },
     { key:'eva',     title:'EVA / NRS dor', desc:'Escala numérica de dor (0–10)' },
@@ -1223,6 +1273,7 @@ function openScalesPicker(onApply) {
           const k = b.dataset.k;
           if (k === 'phq9') openPHQ9(onApply);
           else if (k === 'gad7') openGAD7(onApply);
+          else if (k === 'gds15') openGDS15(onApply);
           else if (k === 'epworth') openEpworth(onApply);
           else if (k === 'meem') openMEEM(onApply);
           else if (k === 'eva') openEVA(onApply);
@@ -1327,6 +1378,77 @@ function openGAD7(onApply) {
       s <= 9  ? 'leve' :
       s <= 14 ? 'moderada' : 'grave',
     onApply
+  });
+}
+
+/* ---- GDS-15 (depressão geriátrica) ---- */
+function openGDS15(onApply) {
+  // [pergunta, valorPositivo] — onde valorPositivo = resposta que pontua 1
+  const items = [
+    ['Está satisfeito(a) com sua vida?', 'nao'],
+    ['Abandonou muitas das suas atividades e interesses?', 'sim'],
+    ['Sente que sua vida está vazia?', 'sim'],
+    ['Sente-se aborrecido(a) com frequência?', 'sim'],
+    ['Está de bom humor a maior parte do tempo?', 'nao'],
+    ['Tem medo que algo ruim possa lhe acontecer?', 'sim'],
+    ['Sente-se feliz a maior parte do tempo?', 'nao'],
+    ['Sente-se desamparado(a) com frequência?', 'sim'],
+    ['Prefere ficar em casa em vez de sair e fazer coisas novas?', 'sim'],
+    ['Sente que tem mais problemas de memória que a maioria das pessoas?', 'sim'],
+    ['Acha maravilhoso estar vivo(a) hoje?', 'nao'],
+    ['Sente-se inútil nas circunstâncias atuais?', 'sim'],
+    ['Sente-se cheio(a) de energia?', 'nao'],
+    ['Sente que sua situação é sem esperança?', 'sim'],
+    ['Acha que a maioria das pessoas está melhor que você?', 'sim'],
+  ];
+  const html = items.map((it, i) => `
+    <div class="form-row" style="margin-bottom:4px;">
+      <div class="form-group">
+        <label>${i+1}. ${escapeHtml(it[0])}</label>
+        <select data-i="${i}" data-pos="${it[1]}">
+          <option value="sim">Sim</option>
+          <option value="nao" selected>Não</option>
+        </select>
+      </div>
+    </div>`).join('');
+  openModal({
+    title:'GDS-15 — Escala de Depressão Geriátrica',
+    size:'lg',
+    bodyHTML:`
+      <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:12px;">
+        Questionário de Yesavage (15 itens). Cada resposta no sentido depressivo soma 1 ponto.
+      </p>
+      <div style="max-height:55vh;overflow-y:auto;padding-right:8px;">${html}</div>
+      <div class="calc-result" id="gds-out"></div>
+      <p class="form-hint" style="margin-top:8px;">
+        Notas de corte (Almeida & Almeida, 1999): &gt; 5 sugere depressão; ≥ 11 indica depressão moderada/grave.
+      </p>
+    `,
+    footHTML:`
+      <div style="flex:1"></div>
+      <button class="btn-secondary" data-close>Cancelar</button>
+      <button class="btn-primary" id="gds-apply">Inserir resultado</button>
+    `,
+    onMount:(m) => {
+      const sels = m.querySelectorAll('select[data-i]');
+      const calc = () => {
+        let total = 0;
+        sels.forEach(s => { if (s.value === s.dataset.pos) total += 1; });
+        let cat;
+        if (total <= 5) cat = 'sem evidência de depressão';
+        else if (total <= 10) cat = 'sugere depressão leve a moderada';
+        else cat = 'sugere depressão moderada a grave';
+        m.querySelector('#gds-out').innerHTML = `<strong>GDS-15: ${total}/15</strong> — ${cat}.`;
+        return { total, cat };
+      };
+      sels.forEach(s => s.onchange = calc);
+      calc();
+      m.querySelector('#gds-apply').onclick = () => {
+        const r = calc();
+        onApply(`GDS-15: ${r.total}/15 — ${r.cat}.`);
+        closeModal();
+      };
+    }
   });
 }
 
@@ -1689,18 +1811,32 @@ function openDocForm(type, doc) {
   else if (type === 'exames') {
     defaultTitle = 'Solicitação de exames';
     const exams = c.exams || [{ name:'' }];
-    const groups = window.EXAM_GROUPS || [];
+    const groups = getAllExamGroups();
+    const builtinCount = (window.EXAM_GROUPS || []).length;
+    const optsHTML = groups.map((g, i) => {
+      const lbl = g.custom ? `★ ${g.name}` : g.name;
+      return `<option value="${i}">${escapeHtml(lbl)}</option>`;
+    }).join('');
     bodyHTML = `
       <div class="form-row">
         <div class="form-group">
-          <label>Pacotes prontos (por queixa / síndrome)</label>
+          <label>Pacotes prontos (★ = salvos por você)</label>
           <div class="btn-row" style="gap:6px;">
             <select id="ex-group-sel" style="flex:1;min-width:240px;">
               <option value="">— escolher pacote —</option>
-              ${groups.map((g, i) => `<option value="${i}">${escapeHtml(g.name)}</option>`).join('')}
+              <optgroup label="Pré-prontos">
+                ${groups.slice(0, builtinCount).map((g, i) => `<option value="${i}">${escapeHtml(g.name)}</option>`).join('')}
+              </optgroup>
+              ${groups.length > builtinCount ? `<optgroup label="Salvos por você">
+                ${groups.slice(builtinCount).map((g, i) => `<option value="${builtinCount + i}">★ ${escapeHtml(g.name)}</option>`).join('')}
+              </optgroup>` : ''}
             </select>
-            <button type="button" class="btn-secondary" id="btn-apply-group">Adicionar pacote</button>
+            <button type="button" class="btn-secondary" id="btn-apply-group">Adicionar</button>
             <button type="button" class="btn-ghost" id="btn-replace-group" title="Substituir lista atual">Substituir</button>
+          </div>
+          <div class="btn-row" style="margin-top:8px;">
+            <button type="button" class="btn-ghost" id="btn-save-group">💾 Salvar lista atual como pacote</button>
+            <button type="button" class="btn-ghost" id="btn-manage-groups">Gerenciar pacotes salvos</button>
           </div>
           <span class="form-hint">"Adicionar" anexa ao final; "Substituir" troca a lista pelo pacote.</span>
         </div>
@@ -1870,18 +2006,17 @@ function openDocForm(type, doc) {
       };
       wireExamRemovers(m);
 
-      // pacotes prontos
+      // pacotes prontos + customizados
       const groupSel = m.querySelector('#ex-group-sel');
       const applyGroup = (replace) => {
         if (!groupSel) return;
         const idx = groupSel.value;
         if (idx === '') return;
-        const grp = (window.EXAM_GROUPS || [])[+idx];
+        const grp = getAllExamGroups()[+idx];
         if (!grp) return;
         const list = m.querySelector('#exams-list');
         if (replace) list.innerHTML = '';
         else {
-          // remove placeholder vazio único, se existir
           if (list.children.length === 1) {
             const only = list.firstElementChild;
             const nameInput = only.querySelector('[data-f=name]');
@@ -1892,14 +2027,42 @@ function openDocForm(type, doc) {
           list.insertAdjacentHTML('beforeend', examEditorHTML(e, list.children.length));
         });
         wireExamRemovers(m);
-        // sugere indicação se vazia
         const ind = m.querySelector('#ex-indication');
         if (ind && !ind.value.trim()) ind.value = `Investigação de ${grp.name.toLowerCase()}.`;
       };
-      const btnApply = m.querySelector('#btn-apply-group');
-      const btnReplace = m.querySelector('#btn-replace-group');
-      if (btnApply) btnApply.onclick = () => applyGroup(false);
-      if (btnReplace) btnReplace.onclick = () => applyGroup(true);
+      m.querySelector('#btn-apply-group').onclick = () => applyGroup(false);
+      m.querySelector('#btn-replace-group').onclick = () => applyGroup(true);
+
+      // salvar lista atual como pacote customizado
+      m.querySelector('#btn-save-group').onclick = async () => {
+        const list = [];
+        m.querySelectorAll('.exam-editor').forEach(ed => {
+          const name = ed.querySelector('[data-f=name]').value.trim();
+          const specs = ed.querySelector('[data-f=specs]').value.trim();
+          if (name) list.push({ name, specs });
+        });
+        if (!list.length) { alert('Adicione ao menos um exame antes de salvar.'); return; }
+        const name = prompt('Nome do pacote (ex: "Investigação de cefaleia da Dra. Maria"):');
+        if (!name || !name.trim()) return;
+        try {
+          const { data, error } = await sb.from('emr_exam_groups').insert({
+            name: name.trim(),
+            exams: list,
+            created_by: currentUser.id
+          }).select().single();
+          if (error) throw error;
+          customExamGroups.push(data);
+          customExamGroups.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+          // re-renderiza o select
+          rebuildGroupSelect(m);
+          alert('Pacote salvo. Estará disponível em todas as próximas solicitações.');
+        } catch (err) { alertErr(err); }
+      };
+
+      // gerenciar pacotes salvos (excluir / renomear)
+      m.querySelector('#btn-manage-groups').onclick = () => openManageGroups(() => {
+        rebuildGroupSelect(m);
+      });
 
       // mostrar/ocultar bloco do acompanhante conforme tipo do atestado
       const subtypeSel = m.querySelector('#at-subtype');
@@ -1976,6 +2139,82 @@ function wireMedRemovers(m) {
       if (list && list.children.length > 1) b.closest('.med-editor').remove();
       else alert('Mantenha ao menos 1 medicamento (ou exclua o documento).');
     };
+  });
+}
+
+function rebuildGroupSelect(m) {
+  const sel = m.querySelector('#ex-group-sel');
+  if (!sel) return;
+  const groups = getAllExamGroups();
+  const builtinCount = (window.EXAM_GROUPS || []).length;
+  let html = '<option value="">— escolher pacote —</option>';
+  html += '<optgroup label="Pré-prontos">';
+  groups.slice(0, builtinCount).forEach((g, i) => {
+    html += `<option value="${i}">${escapeHtml(g.name)}</option>`;
+  });
+  html += '</optgroup>';
+  if (groups.length > builtinCount) {
+    html += '<optgroup label="Salvos por você">';
+    groups.slice(builtinCount).forEach((g, i) => {
+      html += `<option value="${builtinCount + i}">★ ${escapeHtml(g.name)}</option>`;
+    });
+    html += '</optgroup>';
+  }
+  sel.innerHTML = html;
+}
+
+function openManageGroups(onChange) {
+  const render = () => customExamGroups.length
+    ? customExamGroups.map(g => `
+        <div class="doc-row" data-id="${g.id}" style="grid-template-columns:1fr auto auto;">
+          <div>
+            <strong>★ ${escapeHtml(g.name)}</strong>
+            <div style="font-size:0.78rem;color:#7a8a9c;">${(g.exams || []).length} exame${(g.exams||[]).length===1?'':'s'}</div>
+          </div>
+          <button class="btn-ghost" data-act="rename">Renomear</button>
+          <button class="btn-ghost" data-act="del" style="color:var(--danger)">Excluir</button>
+        </div>`).join('')
+    : '<div class="empty-state">Nenhum pacote salvo ainda.</div>';
+  openModal({
+    title:'Pacotes salvos',
+    size:'md',
+    bodyHTML:`<div id="mg-list">${render()}</div>`,
+    footHTML:`<div style="flex:1"></div><button class="btn-secondary" data-close>Fechar</button>`,
+    onMount:(m) => {
+      const wire = () => {
+        m.querySelectorAll('#mg-list .doc-row').forEach(row => {
+          const id = row.dataset.id;
+          const g = customExamGroups.find(x => x.id === id);
+          row.querySelector('[data-act="rename"]').onclick = async () => {
+            const name = prompt('Novo nome:', g.name);
+            if (!name || !name.trim() || name.trim() === g.name) return;
+            try {
+              const { data, error } = await sb.from('emr_exam_groups')
+                .update({ name: name.trim() }).eq('id', id).select().single();
+              if (error) throw error;
+              const idx = customExamGroups.findIndex(x => x.id === id);
+              if (idx >= 0) customExamGroups[idx] = data;
+              customExamGroups.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+              m.querySelector('#mg-list').innerHTML = render();
+              wire();
+              if (onChange) onChange();
+            } catch (err) { alertErr(err); }
+          };
+          row.querySelector('[data-act="del"]').onclick = async () => {
+            if (!confirm(`Excluir o pacote "${g.name}"?`)) return;
+            try {
+              const { error } = await sb.from('emr_exam_groups').delete().eq('id', id);
+              if (error) throw error;
+              customExamGroups = customExamGroups.filter(x => x.id !== id);
+              m.querySelector('#mg-list').innerHTML = render();
+              wire();
+              if (onChange) onChange();
+            } catch (err) { alertErr(err); }
+          };
+        });
+      };
+      wire();
+    }
   });
 }
 
@@ -2188,12 +2427,23 @@ function drawReceitaEspecialVia(doc, xOff, d, c) {
   const PAGE_H = 210;
   const VW     = 148.5;            // largura da via
   const M      = 8;                // margem dentro da via
-  const innerW = VW - 2 * M;       // largura útil
+  const innerW = VW - 2 * M;       // largura útil (~132mm)
   const xLeft  = xOff + M;
   const cx     = xOff + VW / 2;    // centro da via
+  const xRightLimit = xLeft + innerW;
+
+  // utilitário de campo
+  const drawField = (label, value, x, yi, labelW) => {
+    doc.setFont('helvetica', 'bolditalic');
+    doc.setTextColor(13, 27, 42);
+    doc.text(label, x + 2, yi);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(60, 75, 95);
+    doc.text(value || '', x + 2 + labelW, yi);
+  };
 
   // ----- 1) CABEÇALHO -----
-  let y = 14;
+  let y = 12;
   doc.setTextColor(13, 27, 42);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
@@ -2204,7 +2454,6 @@ function drawReceitaEspecialVia(doc, xOff, d, c) {
   doc.setTextColor(100, 110, 125);
   doc.text('Neurologista', cx, y, { align: 'center' });
   y += 1.5;
-  // linha decorativa dourada centralizada
   doc.setDrawColor(184, 154, 94);
   doc.setLineWidth(0.5);
   doc.line(cx - 14, y, cx + 14, y);
@@ -2213,20 +2462,21 @@ function drawReceitaEspecialVia(doc, xOff, d, c) {
   doc.setFontSize(8);
   doc.setTextColor(120, 130, 145);
   doc.text(`CRM-CE ${DOCTOR_CRM_NUMBER}   ·   RQE ${DOCTOR_RQE}`, cx, y, { align: 'center' });
-  y += 6;
+  y += 5;
 
-  // ----- 2) BOXES SUPERIORES -----
-  const boxLW = 86, boxRW = innerW - boxLW - 3, boxH = 36;
-  const xR = xLeft + boxLW + 3;
+  // ----- 2) BOXES SUPERIORES (assinatura dentro do box CONTROLE) -----
+  const boxLW = 80;
+  const boxRW = innerW - boxLW - 3;
+  const boxH  = 50;                // mais alto pra caber assinatura
+  const xR    = xLeft + boxLW + 3;
 
   doc.setDrawColor(40, 50, 65);
   doc.setLineWidth(0.45);
   doc.rect(xLeft, y, boxLW, boxH);
   doc.rect(xR,    y, boxRW, boxH);
 
-  // títulos dos boxes
-  doc.setFont('helvetica', 'bolditalic');
-  doc.setFontSize(9);
+  // títulos
+  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(9);
   doc.setTextColor(13, 27, 42);
   doc.text('IDENTIFICAÇÃO DO EMITENTE',     xLeft + boxLW / 2, y + 5, { align: 'center' });
   doc.text('RECEITUÁRIO CONTROLE ESPECIAL', xR    + boxRW / 2, y + 5, { align: 'center' });
@@ -2234,56 +2484,46 @@ function drawReceitaEspecialVia(doc, xOff, d, c) {
   // campos do EMITENTE
   doc.setFontSize(8.5);
   let yy = y + 11;
-  const drawField = (label, value, x, yi, labelW = 18) => {
-    doc.setFont('helvetica', 'bolditalic');
-    doc.setTextColor(13, 27, 42);
-    doc.text(label, x + 2, yi);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(60, 75, 95);
-    doc.text(value || '', x + 2 + labelW, yi);
-  };
-  drawField('Nome:',         DOCTOR_LEGAL_NAME,                       xLeft, yy, 14); yy += 5;
-  drawField('CRM:',          `${DOCTOR_CRM_NUMBER} ${DOCTOR_CRM_UF}`, xLeft, yy, 14); yy += 5;
-  drawField('Endereço:',     DOCTOR_ADDRESS,                          xLeft, yy, 18); yy += 5;
-  drawField('Telefone:',     DOCTOR_PHONE,                            xLeft, yy, 17); yy += 5;
-  drawField('Cidade e UF:',  DOCTOR_CITY,                             xLeft, yy, 22);
+  drawField('Nome:',        DOCTOR_LEGAL_NAME,                       xLeft, yy, 13); yy += 5.5;
+  drawField('CRM:',         `${DOCTOR_CRM_NUMBER} ${DOCTOR_CRM_UF}`, xLeft, yy, 12); yy += 5.5;
+  drawField('Endereço:',    DOCTOR_ADDRESS,                          xLeft, yy, 18); yy += 5.5;
+  drawField('Telefone:',    DOCTOR_PHONE,                            xLeft, yy, 16); yy += 5.5;
+  drawField('Cidade e UF:', DOCTOR_CITY,                             xLeft, yy, 22);
 
-  // campos do CONTROLE ESPECIAL
+  // campos do CONTROLE ESPECIAL: data + via1/via2 + linha de assinatura DENTRO
   yy = y + 11;
-  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(8.5);
+  doc.setFont('helvetica','bolditalic'); doc.setFontSize(8.5);
   doc.setTextColor(13, 27, 42);
   doc.text('DATA:', xR + 2, yy);
-  doc.setFont('helvetica', 'italic');
+  doc.setFont('helvetica','italic');
   doc.setTextColor(60, 75, 95);
-  doc.text(fmtDate(d.issue_date), xR + 2 + 12, yy);
-  yy += 8;
-  doc.setFont('helvetica', 'italic');
+  doc.text(fmtDate(d.issue_date), xR + 2 + 11, yy);
+  yy += 6.5;
   doc.text('1ª via — farmácia', xR + 2, yy); yy += 5;
   doc.text('2ª via — paciente', xR + 2, yy);
 
-  // ----- 3) LINHA DE ASSINATURA (sob box CONTROLE) -----
-  let yAfterBoxes = y + boxH + 7;
-  doc.setDrawColor(60, 70, 90);
+  // linha de assinatura dentro do box (espaço para carimbo)
+  const sigY = y + boxH - 8;
+  doc.setDrawColor(40, 50, 65);
   doc.setLineWidth(0.4);
-  doc.line(xR, yAfterBoxes, xR + boxRW, yAfterBoxes);
+  doc.line(xR + 4, sigY, xR + boxRW - 4, sigY);
   doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(8);
   doc.setTextColor(13, 27, 42);
-  doc.text('ASSINATURA', xR + boxRW / 2, yAfterBoxes + 4, { align: 'center' });
+  doc.text('ASSINATURA E CARIMBO', xR + boxRW / 2, sigY + 4, { align: 'center' });
 
-  // ----- 4) BLOCO DO PACIENTE (à esquerda, alinhado com a assinatura) -----
-  let yp = yAfterBoxes - 2;
+  // ----- 3) BLOCO DO PACIENTE -----
+  let yp = y + boxH + 5;
   doc.setFontSize(9);
-  drawField('Paciente:', currentPatient.full_name || '',     xLeft, yp, 17); yp += 5;
-  drawField('CPF:',      currentPatient.cpf || '',           xLeft, yp, 9);  yp += 5;
-  drawField('Endereço:', currentPatient.address || '',       xLeft, yp, 17);
+  drawField('Paciente:', currentPatient.full_name || '', xLeft, yp, 17); yp += 5;
+  drawField('CPF:',      currentPatient.cpf       || '', xLeft, yp, 9);  yp += 5;
+  drawField('Endereço:', currentPatient.address   || '', xLeft, yp, 17);
 
-  // ----- 5) PRESCRIÇÕES -----
-  let yMed = Math.max(yp, yAfterBoxes + 6) + 7;
-  const xRightLimit = xLeft + innerW;
+  // ----- 4) PRESCRIÇÕES -----
+  let yMed = yp + 9;
   doc.setTextColor(13, 27, 42);
 
   (c.medications || []).forEach((m) => {
-    if (yMed > PAGE_H - 50) return; // limite — caiba acima dos boxes inferiores
+    if (yMed > PAGE_H - 55) return;
     const nameStr = `${m.name || ''}${m.concentration ? ', ' + m.concentration : ''}`;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
     doc.text(nameStr, xLeft, yMed);
@@ -2293,7 +2533,6 @@ function drawReceitaEspecialVia(doc, xOff, d, c) {
     doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5);
     const usoW = doc.getTextWidth(usoStr);
 
-    // pontilhado entre nome e "uso contínuo"
     doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
     doc.setTextColor(120, 130, 145);
     let xd = xLeft + nameW + 2;
@@ -2305,7 +2544,6 @@ function drawReceitaEspecialVia(doc, xOff, d, c) {
     doc.text(usoStr, xRightLimit - usoW, yMed);
     yMed += 5;
 
-    // posologia
     if (m.posology) {
       doc.setFont('helvetica', 'italic'); doc.setFontSize(10);
       const lines = doc.splitTextToSize(m.posology, innerW);
@@ -2322,54 +2560,59 @@ function drawReceitaEspecialVia(doc, xOff, d, c) {
   });
 
   if (c.instructions) {
-    if (yMed < PAGE_H - 55) {
-      yMed += 3;
+    if (yMed < PAGE_H - 60) {
+      yMed += 2;
       doc.setFont('helvetica','bold'); doc.setFontSize(9);
       doc.text('Orientações:', xLeft, yMed); yMed += 4;
       doc.setFont('helvetica','italic'); doc.setFontSize(9.5);
       const lines = doc.splitTextToSize(c.instructions, innerW);
       for (const ln of lines) {
-        if (yMed > PAGE_H - 50) break;
+        if (yMed > PAGE_H - 55) break;
         doc.text(ln, xLeft, yMed); yMed += 4.3;
       }
     }
   }
 
-  // ----- 6) BOXES INFERIORES (Comprador + Fornecedor) -----
-  const bottomY = PAGE_H - 42;
+  // ----- 5) BOXES INFERIORES (Comprador + Fornecedor) — mais altos -----
+  const compH = 42;
+  const bottomY = PAGE_H - compH - 11;
   const compW = (innerW - 4) / 2;
   doc.setDrawColor(40, 50, 65);
   doc.setLineWidth(0.45);
-  doc.rect(xLeft,             bottomY, compW, 30);
-  doc.rect(xLeft + compW + 4, bottomY, compW, 30);
+  doc.rect(xLeft,             bottomY, compW, compH);
+  doc.rect(xLeft + compW + 4, bottomY, compW, compH);
 
-  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(9);
+  doc.setFont('helvetica','bolditalic'); doc.setFontSize(9);
   doc.setTextColor(13, 27, 42);
-  doc.text('IDENTIFICAÇÃO DO COMPRADOR',   xLeft + compW / 2,           bottomY + 5, { align: 'center' });
-  doc.text('IDENTIFICAÇÃO DO FORNECEDOR',  xLeft + compW + 4 + compW/2, bottomY + 5, { align: 'center' });
+  doc.text('IDENTIFICAÇÃO DO COMPRADOR',  xLeft + compW / 2,             bottomY + 5, { align: 'center' });
+  doc.text('IDENTIFICAÇÃO DO FORNECEDOR', xLeft + compW + 4 + compW / 2, bottomY + 5, { align: 'center' });
 
   // Comprador — labels
-  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(8);
-  let yc = bottomY + 10;
+  doc.setFont('helvetica','bolditalic'); doc.setFontSize(8);
+  let yc = bottomY + 11;
   ['Nome:', 'RG:', 'Endereço:', 'Telefone:', 'Cidade e UF:'].forEach(lbl => {
     doc.text(lbl, xLeft + 2, yc);
-    yc += 4;
+    yc += 6;       // espaço maior pra preencher
   });
 
-  // Fornecedor — DATA + linha + assinatura do farmacêutico
+  // Fornecedor — DATA + linha; ASSINATURA + linha (com folga)
   const xF = xLeft + compW + 4;
-  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(9);
-  doc.text('DATA', xF + compW / 2, bottomY + 13, { align: 'center' });
+  doc.setFont('helvetica','bolditalic'); doc.setFontSize(8.5);
+  doc.text('DATA:', xF + 3, bottomY + 13);
   doc.setLineWidth(0.4);
-  doc.line(xF + 6, bottomY + 18, xF + compW - 6, bottomY + 18);
-  doc.setFontSize(8.5);
-  doc.text('ASSINATURA DO FARMACÊUTICO', xF + compW / 2, bottomY + 22, { align: 'center' });
+  doc.line(xF + 14, bottomY + 13, xF + compW - 4, bottomY + 13);
 
-  // ----- 7) RODAPÉ (cidade / e-mail) -----
-  doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
+  // linha de assinatura do farmacêutico no rodapé do box
+  const fSigY = bottomY + compH - 9;
+  doc.line(xF + 4, fSigY, xF + compW - 4, fSigY);
+  doc.setFont('helvetica','bolditalic'); doc.setFontSize(8);
+  doc.text('ASSINATURA DO FARMACÊUTICO', xF + compW / 2, fSigY + 4, { align: 'center' });
+
+  // ----- 6) RODAPÉ (cidade / e-mail) -----
+  doc.setFont('helvetica','italic'); doc.setFontSize(8);
   doc.setTextColor(140, 150, 165);
-  doc.text(DOCTOR_CITY,            xLeft + innerW, PAGE_H - 9, { align: 'right' });
-  doc.text(`Email: ${DOCTOR_EMAIL}`, xLeft + innerW, PAGE_H - 5.5, { align: 'right' });
+  doc.text(DOCTOR_CITY,                xRightLimit, PAGE_H - 7,   { align: 'right' });
+  doc.text(`Email: ${DOCTOR_EMAIL}`,   xRightLimit, PAGE_H - 3.5, { align: 'right' });
   doc.setTextColor(13, 27, 42);
 }
 
@@ -2553,6 +2796,209 @@ function pdfRelatorio(d, label) {
   pdfFooter(doc);
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
   doc.save(`relatorio-${safe}-${d.issue_date}.pdf`);
+}
+
+/* ===========================================================
+   IA — organizar texto da consulta
+   A chave da API fica APENAS no localStorage do navegador. Nunca
+   é enviada ao Supabase. Suporta Anthropic Claude e OpenAI.
+=========================================================== */
+const AI_DEFAULTS = {
+  anthropic: { model: 'claude-haiku-4-5-20251001' },
+  openai:    { model: 'gpt-4o-mini' }
+};
+
+function getAIConfig() {
+  return {
+    provider: localStorage.getItem('ai_provider') || 'anthropic',
+    apiKey:   localStorage.getItem('ai_api_key')  || '',
+    model:    localStorage.getItem('ai_model')    || ''
+  };
+}
+function setAIConfig({ provider, apiKey, model }) {
+  localStorage.setItem('ai_provider', provider);
+  localStorage.setItem('ai_api_key',  apiKey);
+  localStorage.setItem('ai_model',    model || AI_DEFAULTS[provider].model);
+}
+
+function openAIConfig() {
+  const cfg = getAIConfig();
+  openModal({
+    title:'Configuração da IA',
+    size:'md',
+    bodyHTML:`
+      <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:14px;">
+        A chave fica salva <strong>apenas neste navegador</strong> (localStorage). Nunca é enviada ao
+        servidor do prontuário. A IA é chamada diretamente da sua máquina para o provedor.
+      </p>
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label>Provedor</label>
+          <select id="ai-provider">
+            <option value="anthropic" ${cfg.provider==='anthropic'?'selected':''}>Anthropic (Claude)</option>
+            <option value="openai" ${cfg.provider==='openai'?'selected':''}>OpenAI (GPT)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Modelo</label>
+          <input id="ai-model" placeholder="auto" value="${escapeHtml(cfg.model)}">
+          <span class="form-hint">deixe em branco para usar o padrão do provedor.</span>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>API key</label>
+          <input id="ai-key" type="password" autocomplete="off" value="${escapeHtml(cfg.apiKey)}" placeholder="sk-... ou sk-ant-...">
+        </div>
+      </div>
+      <div class="msg info" style="font-size:0.82rem;">
+        Onde obter: <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a>
+        · <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a>.
+        Custo é mínimo nos modelos sugeridos (centavos por consulta).
+      </div>
+    `,
+    footHTML:`
+      <button class="btn-danger" id="ai-clear">Limpar</button>
+      <div style="flex:1"></div>
+      <button class="btn-secondary" data-close>Cancelar</button>
+      <button class="btn-primary" id="ai-save">Salvar</button>
+    `,
+    onMount:(m) => {
+      m.querySelector('#ai-save').onclick = () => {
+        const provider = m.querySelector('#ai-provider').value;
+        const apiKey = m.querySelector('#ai-key').value.trim();
+        const model = m.querySelector('#ai-model').value.trim();
+        if (!apiKey) { alert('Cole a API key.'); return; }
+        setAIConfig({ provider, apiKey, model });
+        closeModal();
+      };
+      m.querySelector('#ai-clear').onclick = () => {
+        if (!confirm('Remover a chave salva neste navegador?')) return;
+        localStorage.removeItem('ai_provider');
+        localStorage.removeItem('ai_api_key');
+        localStorage.removeItem('ai_model');
+        closeModal();
+      };
+    }
+  });
+}
+
+const AI_FIELD_INSTRUCTIONS = {
+  hda:           'Reescreva esta História da Doença Atual de forma cronológica, em 1–3 parágrafos curtos. Use linguagem médica formal. Mantenha siglas usuais (HAS, DM, etc).',
+  physical_exam: 'Reescreva o exame físico geral organizado por sistemas (geral, AC, AR, abdome, extremidades). Use linguagem médica formal e siglas usuais.',
+  neuro_exam:    'Reescreva o exame neurológico em ordem topográfica padrão (consciência, linguagem, pares cranianos, motor, reflexos, sensibilidade, coordenação, marcha, sinais meníngeos). Use linguagem médica formal.',
+  hypothesis:    'Organize as hipóteses diagnósticas em uma lista enumerada, da mais provável à menos provável, com justificativa breve apenas se já estiver no texto.',
+  plan:          'Organize a conduta em itens claros (medicações com dose/posologia, exames solicitados, orientações, retorno). Não inclua dose/medicação que não esteja no texto.',
+  notes:         'Reescreva as observações em parágrafos claros e objetivos.'
+};
+
+async function organizeWithAI(currentText, fieldName, onApply) {
+  const cfg = getAIConfig();
+  if (!cfg.apiKey) { openAIConfig(); return; }
+
+  // mostra modal de loading + diff
+  openModal({
+    title:'Organizando com IA…',
+    size:'lg',
+    bodyHTML:`
+      <div class="form-row">
+        <div class="form-group">
+          <label>Original</label>
+          <textarea id="ai-orig" style="min-height:140px;" readonly>${escapeHtml(currentText)}</textarea>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Sugestão da IA <span id="ai-status" style="color:var(--gray);font-size:0.75rem;font-weight:400;text-transform:none;letter-spacing:0;">processando…</span></label>
+          <textarea id="ai-result" style="min-height:200px;" placeholder="Aguardando IA..."></textarea>
+        </div>
+      </div>
+      <p class="form-hint">A IA pode editar livremente. Você pode ajustar antes de aplicar.</p>
+    `,
+    footHTML:`
+      <div style="flex:1"></div>
+      <button class="btn-secondary" data-close>Cancelar</button>
+      <button class="btn-primary" id="ai-apply" disabled>Aplicar ao campo</button>
+    `,
+    onMount: async (m) => {
+      try {
+        const instr = AI_FIELD_INSTRUCTIONS[fieldName] || 'Reescreva o texto de forma clara e organizada.';
+        const text = await callAI(cfg, instr, currentText);
+        m.querySelector('#ai-result').value = text;
+        m.querySelector('#ai-status').textContent = `via ${cfg.provider} · ${cfg.model || AI_DEFAULTS[cfg.provider].model}`;
+        m.querySelector('#ai-apply').disabled = false;
+        m.querySelector('#ai-apply').onclick = () => {
+          onApply(m.querySelector('#ai-result').value);
+          closeModal();
+        };
+      } catch (err) {
+        m.querySelector('#ai-result').value = '';
+        m.querySelector('#ai-status').textContent = 'erro';
+        const msg = (err?.message || String(err)).slice(0, 280);
+        m.querySelector('#ai-result').placeholder = `Erro: ${msg}`;
+        console.error(err);
+      }
+    }
+  });
+}
+
+const AI_SYSTEM_PROMPT = [
+  'Você é assistente de um médico neurologista brasileiro e ajuda a revisar texto clínico de prontuário.',
+  'Recebe um trecho digitado de forma rápida (anotações, abreviações, frases incompletas) e devolve a MESMA informação reescrita em linguagem médica formal pt-BR.',
+  '',
+  'REGRAS RÍGIDAS — siga sempre:',
+  '1) NÃO invente sintomas, sinais, achados, diagnósticos ou medicações.',
+  '2) NÃO acrescente informação que não esteja explícita no texto.',
+  '3) NÃO altere o sentido clínico nem inverta laterais ou cronologia.',
+  '4) Mantenha siglas médicas usuais (HAS, DM, HDA, RNM, EEG, AVC, etc).',
+  '5) Não use markdown, headers ou bullets ★/✓; use texto corrido ou listas com hífen apenas se o texto original já tiver listas.',
+  '6) Se o texto estiver muito curto/vago, devolva-o praticamente como está (apenas correção ortográfica e pontuação).',
+  '7) Devolva APENAS o texto reescrito — sem comentários, sem "aqui está", sem aspas externas.'
+].join('\n');
+
+async function callAI(cfg, fieldInstruction, text) {
+  const userPrompt = `${fieldInstruction}\n\n--- TEXTO ORIGINAL ---\n${text}\n--- FIM ---`;
+  if (cfg.provider === 'anthropic') {
+    const model = cfg.model || AI_DEFAULTS.anthropic.model;
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': cfg.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1500,
+        system: AI_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userPrompt }]
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
+    return (data.content || []).map(b => b.text || '').join('').trim();
+  } else {
+    const model = cfg.model || AI_DEFAULTS.openai.model;
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${cfg.apiKey}`,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1500,
+        messages: [
+          { role: 'system', content: AI_SYSTEM_PROMPT },
+          { role: 'user',   content: userPrompt }
+        ]
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
+    return (data.choices?.[0]?.message?.content || '').trim();
+  }
 }
 
 /* ===========================================================
