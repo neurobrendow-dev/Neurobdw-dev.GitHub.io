@@ -686,7 +686,7 @@ async function onSignedIn(user) {
   }
   currentProfile = profile;
   $('topbar-actions').innerHTML = `
-    <a class="btn-link" href="/medico/">← MENU PRINCIPAL</a>
+    <a class="btn-link" href="/medico/">← Diário de cefaleia</a>
     <button class="btn-link" id="btn-ai-config" title="Configurar IA">⚙ IA</button>
     <span class="topbar-user">Dr(a). ${escapeHtml(profile.full_name.split(' ')[0])}</span>
     <button class="btn-link" id="btn-logout">Sair</button>
@@ -2670,7 +2670,7 @@ function drawReceitaEspecialVia(doc, xOff, d, c) {
   doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(9);
   doc.setTextColor(13, 27, 42);
   doc.text('IDENTIFICAÇÃO DO EMITENTE',     xLeft + boxLW / 2, y + 5, { align: 'center' });
-  doc.text('CONTROLE ESPECIAL', xR    + boxRW / 2, y + 5, { align: 'center' });
+  doc.text('RECEITUÁRIO CONTROLE ESPECIAL', xR    + boxRW / 2, y + 5, { align: 'center' });
 
   // campos do EMITENTE
   doc.setFontSize(8.5);
@@ -2999,6 +2999,22 @@ const AI_DEFAULTS = {
   openai:    { model: 'gpt-4o' }
 };
 
+/* Modelos disponíveis em cada provedor (nome técnico + label amigável). */
+const AI_MODELS = {
+  anthropic: [
+    { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 — rápido e barato' },
+    { id: 'claude-sonnet-4-6',         label: 'Claude Sonnet 4.6 — equilíbrio (recomendado)' },
+    { id: 'claude-opus-4-7',           label: 'Claude Opus 4.7 — mais inteligente, mais caro' },
+  ],
+  openai: [
+    { id: 'gpt-4o-mini',  label: 'GPT-4o mini — rápido e muito barato' },
+    { id: 'gpt-4o',       label: 'GPT-4o — equilíbrio (recomendado)' },
+    { id: 'gpt-4-turbo',  label: 'GPT-4 Turbo — versão anterior' },
+    { id: 'o1-mini',      label: 'o1-mini — raciocínio reduzido' },
+    { id: 'o1',           label: 'o1 — raciocínio profundo, mais caro' },
+  ]
+};
+
 function getAIConfig() {
   return {
     provider: localStorage.getItem('ai_provider') || 'anthropic',
@@ -3014,6 +3030,18 @@ function setAIConfig({ provider, apiKey, model }) {
 
 function openAIConfig() {
   const cfg = getAIConfig();
+
+  const renderModelOptions = (provider, currentModel) => {
+    const list = AI_MODELS[provider] || [];
+    const ids = list.map(m => m.id);
+    const isCustom = currentModel && !ids.includes(currentModel);
+    let html = list.map(m =>
+      `<option value="${escapeHtml(m.id)}" ${m.id === currentModel ? 'selected' : ''}>${escapeHtml(m.label)}</option>`
+    ).join('');
+    html += `<option value="__custom__" ${isCustom ? 'selected' : ''}>Outro (digitar nome)…</option>`;
+    return html;
+  };
+
   openModal({
     title:'Configuração da IA',
     size:'md',
@@ -3022,18 +3050,23 @@ function openAIConfig() {
         A chave fica salva <strong>apenas neste navegador</strong> (localStorage). Nunca é enviada ao
         servidor do prontuário. A IA é chamada diretamente da sua máquina para o provedor.
       </p>
-      <div class="form-row cols-2">
+      <div class="form-row">
         <div class="form-group">
           <label>Provedor</label>
           <select id="ai-provider">
             <option value="anthropic" ${cfg.provider==='anthropic'?'selected':''}>Anthropic (Claude)</option>
-            <option value="openai" ${cfg.provider==='openai'?'selected':''}>OpenAI (GPT)</option>
+            <option value="openai" ${cfg.provider==='openai'?'selected':''}>OpenAI (ChatGPT)</option>
           </select>
         </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
           <label>Modelo</label>
-          <input id="ai-model" placeholder="auto" value="${escapeHtml(cfg.model)}">
-          <span class="form-hint">deixe em branco para usar o padrão do provedor.</span>
+          <select id="ai-model-select">
+            ${renderModelOptions(cfg.provider || 'anthropic', cfg.model || AI_DEFAULTS[cfg.provider || 'anthropic'].model)}
+          </select>
+          <input id="ai-model-custom" placeholder="ex: gpt-5, claude-x-y..." value="${escapeHtml(cfg.model || '')}" style="margin-top:8px;display:none;">
+          <span class="form-hint">Mude o modelo a qualquer momento — sem reiniciar.</span>
         </div>
       </div>
       <div class="form-row">
@@ -3045,7 +3078,7 @@ function openAIConfig() {
       <div class="msg info" style="font-size:0.82rem;">
         Onde obter: <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a>
         · <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com</a>.
-        Custo é mínimo nos modelos sugeridos (centavos por consulta).
+        Modelos "mini"/"haiku" custam centavos por consulta.
       </div>
     `,
     footHTML:`
@@ -3055,16 +3088,38 @@ function openAIConfig() {
       <button class="btn-primary" id="ai-save">Salvar</button>
     `,
     onMount:(m) => {
+      const provSel   = m.querySelector('#ai-provider');
+      const modelSel  = m.querySelector('#ai-model-select');
+      const modelCust = m.querySelector('#ai-model-custom');
+
+      const syncCustomVisibility = () => {
+        modelCust.style.display = modelSel.value === '__custom__' ? '' : 'none';
+      };
+      syncCustomVisibility();
+
+      // troca o provedor → atualiza lista de modelos com o default daquele provedor
+      provSel.onchange = () => {
+        const def = AI_DEFAULTS[provSel.value].model;
+        modelSel.innerHTML = renderModelOptions(provSel.value, def);
+        modelCust.value = '';
+        syncCustomVisibility();
+      };
+      modelSel.onchange = syncCustomVisibility;
+
       m.querySelector('#ai-save').onclick = () => {
-        const provider = m.querySelector('#ai-provider').value;
+        const provider = provSel.value;
         const apiKey = m.querySelector('#ai-key').value.trim();
-        const model = m.querySelector('#ai-model').value.trim();
+        let model = modelSel.value;
+        if (model === '__custom__') {
+          model = modelCust.value.trim();
+          if (!model) { alert('Digite o nome do modelo personalizado.'); return; }
+        }
         if (!apiKey) { alert('Cole a API key.'); return; }
         setAIConfig({ provider, apiKey, model });
         closeModal();
       };
       m.querySelector('#ai-clear').onclick = () => {
-        if (!confirm('Remover a chave salva neste navegador?')) return;
+        if (!confirm('Remover a chave e configurações salvas neste navegador?')) return;
         localStorage.removeItem('ai_provider');
         localStorage.removeItem('ai_api_key');
         localStorage.removeItem('ai_model');
