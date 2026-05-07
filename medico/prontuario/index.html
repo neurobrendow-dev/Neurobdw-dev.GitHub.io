@@ -2390,37 +2390,86 @@ function pdfFooter(doc) {
   }
 }
 
-/* Salva PDF de forma robusta:
-   - tenta doc.save() (download direto)
-   - se falhar OU se Safari/iOS, abre em nova aba (window.open com blob URL)
-   Necessário pra navegadores que bloqueiam download iniciado depois de
-   await (perde user-gesture). Sempre chamado dentro do clique do botão. */
+/* Sanitiza nome de arquivo (remove acentos e chars problemáticos para download). */
+function safeFilename(s) {
+  return (s || 'arquivo')
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/-+/g, '-').replace(/^-|-$/g, '')
+    .toLowerCase()
+    .slice(0, 120);
+}
+
+/* Salva PDF: SEMPRE mostra um banner com link clicável, e em paralelo
+   tenta abrir/baixar automaticamente. Funciona em qualquer navegador,
+   mesmo com bloqueador de popup ou Safari restrito. */
 function pdfSave(doc, filename) {
+  const fname = safeFilename(filename) || 'documento.pdf';
+  let blob, blobUrl;
   try {
-    const blob = doc.output('blob');
-    const url = URL.createObjectURL(blob);
+    blob = doc.output('blob');
+    blobUrl = URL.createObjectURL(blob);
+    console.log('[pdfSave] PDF gerado:', fname, blob.size, 'bytes');
+  } catch (err) {
+    console.error('[pdfSave] falha ao gerar blob:', err);
+    alert('Erro ao gerar PDF: ' + err.message);
+    return;
+  }
+
+  // Tenta abrir automaticamente em nova aba (silencioso se bloqueado)
+  try { window.open(blobUrl, '_blank', 'noopener,noreferrer'); } catch (_) {}
+  // Tenta forçar download via <a download> (Chrome/Firefox)
+  try {
     const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.rel = 'noopener';
+    a.href = blobUrl;
+    a.download = fname;
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
-    setTimeout(() => {
-      document.body.removeChild(a);
-      // mantém o URL um pouco mais antes de revogar (Safari)
-      setTimeout(() => URL.revokeObjectURL(url), 4000);
-    }, 100);
-    // fallback paralelo: abre em nova aba caso o download tenha sido bloqueado
-    // (alguns Safari ignoram <a download>; o open garante visualização)
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    if (isSafari) {
-      try { window.open(url, '_blank', 'noopener,noreferrer'); } catch (_) {}
-    }
-  } catch (err) {
-    console.error('pdfSave falhou:', err);
-    alert('Erro ao gerar PDF: ' + err.message);
-  }
+    setTimeout(() => { try { a.remove(); } catch (_) {} }, 500);
+  } catch (_) {}
+
+  // SEMPRE mostra um banner ancorado com link clicável. Garantido funcionar.
+  showPdfBanner(blobUrl, fname);
+
+  // Limpa o URL depois de muito tempo (usuário pode demorar a clicar)
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
+}
+
+function showPdfBanner(url, filename) {
+  // remove banner anterior se existir
+  const old = document.getElementById('pdf-banner');
+  if (old) old.remove();
+
+  const div = document.createElement('div');
+  div.id = 'pdf-banner';
+  div.style.cssText = `
+    position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+    background: #0d1b2a; color: #f5f2ee;
+    padding: 14px 18px; box-shadow: 0 12px 36px rgba(0,0,0,0.3);
+    border-left: 3px solid #b89a5e;
+    display: flex; align-items: center; gap: 14px;
+    font-family: 'DM Sans', sans-serif; font-size: 0.92rem;
+    max-width: 420px;
+  `;
+  div.innerHTML = `
+    <div style="font-size:1.4rem;">📄</div>
+    <div style="flex:1;">
+      <div style="font-weight:500;">PDF gerado</div>
+      <div style="font-size:0.78rem;color:#c8d8e8;margin-top:2px;">${escapeHtml(filename)}</div>
+    </div>
+    <a href="${url}" download="${escapeHtml(filename)}" target="_blank" rel="noopener"
+       style="background:#b89a5e;color:#0d1b2a;padding:8px 14px;text-decoration:none;
+              font-weight:500;font-size:0.78rem;letter-spacing:0.06em;text-transform:uppercase;">
+      Abrir / baixar
+    </a>
+    <button id="pdf-banner-x" aria-label="Fechar" style="background:none;border:none;color:#c8d8e8;
+            font-size:1.3rem;cursor:pointer;padding:0 4px;line-height:1;">×</button>
+  `;
+  document.body.appendChild(div);
+  div.querySelector('#pdf-banner-x').onclick = () => div.remove();
+  // auto-remove depois de 60s
+  setTimeout(() => { try { div.remove(); } catch (_) {} }, 60000);
 }
 
 function pdfWrappedText(doc, text, x, y, maxW, lineH = 5) {
