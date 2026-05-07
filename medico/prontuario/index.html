@@ -2064,11 +2064,14 @@ function openDocForm(type, doc) {
         const ind = m.querySelector('#ex-indication');
         if (ind && !ind.value.trim()) ind.value = `Investigação de ${grp.name.toLowerCase()}.`;
       };
-      m.querySelector('#btn-apply-group').onclick = () => applyGroup(false);
-      m.querySelector('#btn-replace-group').onclick = () => applyGroup(true);
+      // botões de pacote/grupos só existem no form de exames; ignora se ausentes
+      const btnApply = m.querySelector('#btn-apply-group');
+      if (btnApply) btnApply.onclick = () => applyGroup(false);
+      const btnReplace = m.querySelector('#btn-replace-group');
+      if (btnReplace) btnReplace.onclick = () => applyGroup(true);
 
-      // salvar lista atual como pacote customizado
-      m.querySelector('#btn-save-group').onclick = async () => {
+      const btnSaveGroup = m.querySelector('#btn-save-group');
+      if (btnSaveGroup) btnSaveGroup.onclick = async () => {
         const list = [];
         m.querySelectorAll('.exam-editor').forEach(ed => {
           const name = ed.querySelector('[data-f=name]').value.trim();
@@ -2087,14 +2090,13 @@ function openDocForm(type, doc) {
           if (error) throw error;
           customExamGroups.push(data);
           customExamGroups.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
-          // re-renderiza o select
           rebuildGroupSelect(m);
           alert('Pacote salvo. Estará disponível em todas as próximas solicitações.');
         } catch (err) { alertErr(err); }
       };
 
-      // gerenciar pacotes salvos (excluir / renomear)
-      m.querySelector('#btn-manage-groups').onclick = () => openManageGroups(() => {
+      const btnManage = m.querySelector('#btn-manage-groups');
+      if (btnManage) btnManage.onclick = () => openManageGroups(() => {
         rebuildGroupSelect(m);
       });
 
@@ -2107,40 +2109,60 @@ function openDocForm(type, doc) {
         };
       }
 
-      m.querySelector('#btn-save-doc').onclick = async () => {
-        const payload = {
-          patient_id: currentPatient.id,
-          type,
-          title: m.querySelector('#doc-title').value.trim() || defaultTitle,
-          issue_date: m.querySelector('#doc-issue-date').value || new Date().toISOString().slice(0,10),
-          content: getContent(m)
-        };
-        // 1) gera PDF AGORA (dentro do clique, preserva user-gesture)
-        if (isNew) {
+      m.querySelector('#btn-save-doc').onclick = async (ev) => {
+        ev?.preventDefault?.();
+        console.log('[btn-save-doc] CLICK recebido — type=', type, 'isNew=', isNew);
+        const btn = ev?.currentTarget || m.querySelector('#btn-save-doc');
+        const origLabel = btn?.textContent;
+        if (btn) { btn.disabled = true; btn.textContent = 'Gerando…'; }
+        try {
+          const payload = {
+            patient_id: currentPatient.id,
+            type,
+            title: m.querySelector('#doc-title').value.trim() || defaultTitle,
+            issue_date: m.querySelector('#doc-issue-date').value || new Date().toISOString().slice(0,10),
+            content: getContent(m)
+          };
+          console.log('[btn-save-doc] payload OK', payload);
+
+          // 1) gera PDF AGORA (no user-gesture do clique)
           try {
+            console.log('[btn-save-doc] chamando generateDocPDF');
             generateDocPDF(payload);
+            console.log('[btn-save-doc] generateDocPDF retornou OK');
           } catch (err) {
-            console.error('PDF gen falhou:', err);
-            alert('Erro ao gerar PDF: ' + err.message);
+            console.error('[btn-save-doc] PDF gen falhou:', err);
+            alert('Erro ao gerar PDF:\n\n' + (err?.message || err) + '\n\nVerifique o console (Cmd+Opt+J) para detalhes.');
+            if (btn) { btn.disabled = false; btn.textContent = origLabel; }
             return;
           }
-        }
-        // 2) depois persiste no Supabase
-        try {
-          if (isNew) {
-            const { data, error } = await sb.from('emr_documents').insert(payload).select().single();
-            if (error) throw error;
-            currentDocs.unshift(data);
-          } else {
-            const { data, error } = await sb.from('emr_documents').update(payload).eq('id', doc.id).select().single();
-            if (error) throw error;
-            const idx = currentDocs.findIndex(x => x.id === doc.id);
-            if (idx >= 0) currentDocs[idx] = data;
+
+          // 2) persiste no Supabase
+          try {
+            if (isNew) {
+              const { data, error } = await sb.from('emr_documents').insert(payload).select().single();
+              if (error) throw error;
+              currentDocs.unshift(data);
+            } else {
+              const { data, error } = await sb.from('emr_documents').update(payload).eq('id', doc.id).select().single();
+              if (error) throw error;
+              const idx = currentDocs.findIndex(x => x.id === doc.id);
+              if (idx >= 0) currentDocs[idx] = data;
+            }
+            console.log('[btn-save-doc] Supabase OK');
+            closeModal();
+            renderDocs();
+            renderSummary();
+          } catch (err) {
+            console.error('[btn-save-doc] Supabase falhou:', err);
+            alert('PDF gerado, mas falhou ao salvar no banco:\n\n' + (err?.message || err));
+            if (btn) { btn.disabled = false; btn.textContent = origLabel; }
           }
-          closeModal();
-          renderDocs();
-          renderSummary();
-        } catch (err) { alertErr(err); }
+        } catch (outer) {
+          console.error('[btn-save-doc] erro inesperado:', outer);
+          alert('Erro inesperado:\n\n' + (outer?.message || outer));
+          if (btn) { btn.disabled = false; btn.textContent = origLabel; }
+        }
       };
     }
   });
