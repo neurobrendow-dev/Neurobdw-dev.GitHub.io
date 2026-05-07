@@ -14,6 +14,7 @@ permalink: /medico/prontuario/
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="cid10.js"></script>
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
@@ -496,13 +497,18 @@ const SUPABASE_URL      = 'https://telypzqmofahhhnphend.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zstGbiAexvo1-IxgaNFObQ_mrTNQ8pg';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-const DOCTOR_NAME = 'Dr. Brendow Mártin';
-const DOCTOR_TITLE = 'Médico Neurologista';
-const DOCTOR_CRM = 'CRM-CE 22318';
-const DOCTOR_RQE = '';                    // preencha se tiver RQE
-const DOCTOR_CITY = 'Fortaleza, CE';
-const DOCTOR_EMAIL = 'neuro.brendow@gmail.com';
-const DOCTOR_SITE = 'neurobrendow.com.br';
+const DOCTOR_NAME       = 'Dr. Brendow Mártin';
+const DOCTOR_LEGAL_NAME = 'Brendow Martin Freitas Gadelha';
+const DOCTOR_TITLE      = 'Médico Neurologista';
+const DOCTOR_CRM        = 'CRM-CE 22318';
+const DOCTOR_CRM_NUMBER = '22318';
+const DOCTOR_CRM_UF     = 'CE';
+const DOCTOR_RQE        = '18935';
+const DOCTOR_ADDRESS    = 'Rua Senador Pompeu, 834, Sala 415';
+const DOCTOR_PHONE      = '(85) 98202-0796';
+const DOCTOR_CITY       = 'Fortaleza - CE';
+const DOCTOR_EMAIL      = 'neuro.brendow@gmail.com';
+const DOCTOR_SITE       = 'neurobrendow.com.br';
 
 /* ===========================================================
    STATE
@@ -516,72 +522,22 @@ let currentConsults = [];
 let currentDocs = [];
 
 /* ===========================================================
-   CID-10 — lista comum em neurologia
+   CID-10 — carregada de cid10.js (window.CID10)
 =========================================================== */
-const CID_LIST = [
-  ['F03',   'Demência não especificada'],
-  ['F32.9', 'Episódio depressivo, não especificado'],
-  ['F41.0', 'Transtorno de pânico'],
-  ['F41.1', 'Ansiedade generalizada'],
-  ['F45.4', 'Transtorno doloroso somatoforme'],
-  ['G20',   'Doença de Parkinson'],
-  ['G21.9', 'Parkinsonismo secundário, não especificado'],
-  ['G25.0', 'Tremor essencial'],
-  ['G25.3', 'Mioclonia'],
-  ['G25.5', 'Síndrome das pernas inquietas'],
-  ['G30.9', 'Doença de Alzheimer, não especificada'],
-  ['G31.0', 'Atrofia cerebral circunscrita'],
-  ['G31.8', 'Outras doenças degenerativas especificadas do SN'],
-  ['G35',   'Esclerose múltipla'],
-  ['G36.0', 'Neuromielite óptica'],
-  ['G37.9', 'Doença desmielinizante do SNC, não especificada'],
-  ['G40.0', 'Epilepsia parcial idiopática'],
-  ['G40.2', 'Epilepsia parcial sintomática (com crises focais complexas)'],
-  ['G40.3', 'Epilepsia generalizada idiopática'],
-  ['G40.6', 'Crises de grande mal, não especificadas'],
-  ['G40.9', 'Epilepsia, não especificada'],
-  ['G41.9', 'Estado de mal epiléptico, não especificado'],
-  ['G43.0', 'Enxaqueca sem aura'],
-  ['G43.1', 'Enxaqueca com aura'],
-  ['G43.3', 'Enxaqueca complicada'],
-  ['G43.8', 'Outras enxaquecas'],
-  ['G43.9', 'Enxaqueca, não especificada'],
-  ['G44.0', 'Síndrome de cefaleia em salvas'],
-  ['G44.2', 'Cefaleia tensional'],
-  ['G44.4', 'Cefaleia por uso de medicamentos'],
-  ['G45.9', 'Acidente isquêmico transitório (AIT)'],
-  ['G47.0', 'Distúrbios do início e da manutenção do sono'],
-  ['G47.3', 'Apneia do sono'],
-  ['G47.4', 'Narcolepsia e cataplexia'],
-  ['G50.0', 'Neuralgia do trigêmeo'],
-  ['G51.0', 'Paralisia de Bell'],
-  ['G54.4', 'Distúrbios das raízes lombossacrais'],
-  ['G56.0', 'Síndrome do túnel do carpo'],
-  ['G57.5', 'Síndrome do túnel do tarso'],
-  ['G62.9', 'Polineuropatia, não especificada'],
-  ['G70.0', 'Miastenia gravis'],
-  ['G80.9', 'Paralisia cerebral, não especificada'],
-  ['G81.9', 'Hemiplegia, não especificada'],
-  ['G82.2', 'Paraplegia, não especificada'],
-  ['G91.9', 'Hidrocefalia, não especificada'],
-  ['G93.3', 'Síndrome da fadiga pós-viral'],
-  ['G93.4', 'Encefalopatia, não especificada'],
-  ['G93.9', 'Transtorno do encéfalo, não especificado'],
-  ['G95.9', 'Doença da medula espinhal, não especificada'],
-  ['I63.9', 'Infarto cerebral, não especificado'],
-  ['I64',   'AVC não especificado como hemorrágico ou isquêmico'],
-  ['I67.4', 'Encefalopatia hipertensiva'],
-  ['I69.4', 'Sequelas de AVC'],
-  ['M54.2', 'Cervicalgia'],
-  ['M54.5', 'Lombalgia'],
-  ['R20.2', 'Parestesia da pele'],
-  ['R26.8', 'Outras alterações da marcha'],
-  ['R42',   'Tontura e instabilidade'],
-  ['R51',   'Cefaleia'],
-  ['R55',   'Síncope e colapso'],
-  ['R56.9', 'Convulsões, não especificadas'],
-  ['Z03.3', 'Observação por suspeita de transtornos do SN']
-];
+const CID_LIST = window.CID10 || [];
+const CID_INDEX = new Map(CID_LIST.map(([c, d]) => [c, d]));
+function searchCID(q) {
+  const t = q.trim().toLowerCase();
+  if (!t) return [];
+  const out = [];
+  for (const [c, d] of CID_LIST) {
+    if (c.toLowerCase().includes(t) || d.toLowerCase().includes(t)) {
+      out.push([c, d]);
+      if (out.length >= 50) break;
+    }
+  }
+  return out;
+}
 
 /* ===========================================================
    TEMPLATES de exame neurológico
@@ -1130,8 +1086,7 @@ function openConsultForm(c) {
         </div>
         <div class="form-row">
           <div class="btn-row">
-            <button type="button" class="btn-secondary" id="btn-glasgow">Calculadora Glasgow</button>
-            <button type="button" class="btn-secondary" id="btn-nihss">Calculadora NIHSS</button>
+            <button type="button" class="btn-secondary" id="btn-scales">Escalas / questionários ambulatoriais</button>
           </div>
         </div>
         <div class="form-row">
@@ -1202,11 +1157,7 @@ function openConsultForm(c) {
         };
       });
 
-      modal.querySelector('#btn-glasgow').onclick = () => openGlasgowCalc((txt) => {
-        const ta = modal.querySelector('textarea[name="neuro_exam"]');
-        ta.value = (ta.value ? ta.value + '\n\n' : '') + txt;
-      });
-      modal.querySelector('#btn-nihss').onclick = () => openNIHSSCalc((txt) => {
+      modal.querySelector('#btn-scales').onclick = () => openScalesPicker((txt) => {
         const ta = modal.querySelector('textarea[name="neuro_exam"]');
         ta.value = (ta.value ? ta.value + '\n\n' : '') + txt;
       });
@@ -1241,135 +1192,414 @@ function openConsultForm(c) {
 }
 
 /* ===========================================================
-   CALCULADORAS
+   ESCALAS AMBULATORIAIS — seletor + implementações
 =========================================================== */
-function openGlasgowCalc(onApply) {
+function openScalesPicker(onApply) {
+  const items = [
+    { key:'phq9',    title:'PHQ-9',    desc:'Rastreio e gravidade de depressão (9 itens)' },
+    { key:'gad7',    title:'GAD-7',    desc:'Rastreio e gravidade de ansiedade (7 itens)' },
+    { key:'epworth', title:'Epworth',  desc:'Sonolência diurna excessiva (8 situações)' },
+    { key:'meem',    title:'MEEM',     desc:'Mini-Exame do Estado Mental (Folstein, 30 pts)' },
+    { key:'eva',     title:'EVA / NRS dor', desc:'Escala numérica de dor (0–10)' },
+    { key:'hy',      title:'Hoehn & Yahr', desc:'Estadiamento da doença de Parkinson' },
+    { key:'midas',   title:'MIDAS',    desc:'Incapacidade por enxaqueca (3 meses)' },
+    { key:'hit6',    title:'HIT-6',    desc:'Impacto da cefaleia (6 itens)' },
+  ];
   openModal({
-    title: 'Escala de Coma de Glasgow',
-    size: 'md',
-    bodyHTML: `
-      <div class="form-row cols-3">
-        <div class="form-group">
-          <label>Abertura ocular</label>
-          <select id="g-eye">
-            <option value="4">4 — Espontânea</option>
-            <option value="3">3 — Ao chamado</option>
-            <option value="2">2 — À dor</option>
-            <option value="1">1 — Ausente</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Resposta verbal</label>
-          <select id="g-verbal">
-            <option value="5">5 — Orientado</option>
-            <option value="4">4 — Confuso</option>
-            <option value="3">3 — Palavras inapropriadas</option>
-            <option value="2">2 — Sons incompreensíveis</option>
-            <option value="1">1 — Ausente</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Resposta motora</label>
-          <select id="g-motor">
-            <option value="6">6 — Obedece comandos</option>
-            <option value="5">5 — Localiza dor</option>
-            <option value="4">4 — Retirada à dor</option>
-            <option value="3">3 — Flexão anormal</option>
-            <option value="2">2 — Extensão anormal</option>
-            <option value="1">1 — Ausente</option>
-          </select>
-        </div>
+    title:'Escolha a escala',
+    size:'md',
+    bodyHTML:`
+      <div class="doc-creator-grid">
+        ${items.map(it => `
+          <button class="doc-creator-btn" data-k="${it.key}" type="button">
+            <span class="lbl">${it.title}</span>
+            <div class="desc">${it.desc}</div>
+          </button>`).join('')}
+      </div>`,
+    footHTML:`<div style="flex:1"></div><button class="btn-secondary" data-close>Fechar</button>`,
+    onMount:(m) => {
+      m.querySelectorAll('.doc-creator-btn').forEach(b => {
+        b.onclick = () => {
+          const k = b.dataset.k;
+          if (k === 'phq9') openPHQ9(onApply);
+          else if (k === 'gad7') openGAD7(onApply);
+          else if (k === 'epworth') openEpworth(onApply);
+          else if (k === 'meem') openMEEM(onApply);
+          else if (k === 'eva') openEVA(onApply);
+          else if (k === 'hy') openHoehnYahr(onApply);
+          else if (k === 'midas') openMIDAS(onApply);
+          else if (k === 'hit6') openHIT6(onApply);
+        };
+      });
+    }
+  });
+}
+
+/* ---- helpers comuns ---- */
+function _openLikertScale({ title, intro, options, items, footnote, categorize, onApply }) {
+  const html = items.map((q, i) => `
+    <div class="form-row" style="margin-bottom:6px;">
+      <div class="form-group">
+        <label>${i + 1}. ${escapeHtml(q)}</label>
+        <select data-i="${i}">
+          ${options.map(o => `<option value="${o[0]}">${o[0]} — ${escapeHtml(o[1])}</option>`).join('')}
+        </select>
       </div>
-      <div class="calc-result" id="g-result"></div>
+    </div>`).join('');
+  openModal({
+    title,
+    size:'lg',
+    bodyHTML:`
+      <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:14px;">${escapeHtml(intro)}</p>
+      <div style="max-height:55vh;overflow-y:auto;padding-right:8px;">${html}</div>
+      <div class="calc-result" id="r-out"></div>
+      ${footnote ? `<p class="form-hint" style="margin-top:8px;">${escapeHtml(footnote)}</p>` : ''}
     `,
-    footHTML: `
+    footHTML:`
       <div style="flex:1"></div>
       <button class="btn-secondary" data-close>Cancelar</button>
-      <button class="btn-primary" id="g-apply">Inserir no exame</button>
+      <button class="btn-primary" id="r-apply">Inserir resultado</button>
     `,
-    onMount: (m) => {
+    onMount:(m) => {
       const calc = () => {
-        const e = +m.querySelector('#g-eye').value;
-        const v = +m.querySelector('#g-verbal').value;
-        const mo = +m.querySelector('#g-motor').value;
-        const total = e + v + mo;
-        let cat;
-        if (total >= 13) cat = 'TCE leve';
-        else if (total >= 9) cat = 'TCE moderado';
-        else cat = 'TCE grave';
-        m.querySelector('#g-result').innerHTML =
-          `<strong>Glasgow ${total} (O${e}V${v}M${mo})</strong> — ${cat}`;
-        return { total, e, v, mo, cat };
+        let total = 0;
+        m.querySelectorAll('select[data-i]').forEach(s => total += +s.value);
+        const c = categorize(total);
+        m.querySelector('#r-out').innerHTML = `<strong>${title}: ${total} ponto${total===1?'':'s'}</strong> — ${escapeHtml(c)}`;
+        return { total, cat: c };
       };
-      ['#g-eye','#g-verbal','#g-motor'].forEach(s => m.querySelector(s).onchange = calc);
+      m.querySelectorAll('select[data-i]').forEach(s => s.onchange = calc);
       calc();
-      m.querySelector('#g-apply').onclick = () => {
+      m.querySelector('#r-apply').onclick = () => {
         const r = calc();
-        onApply(`Escala de Coma de Glasgow: ${r.total} (O${r.e} V${r.v} M${r.mo}) — ${r.cat}.`);
+        onApply(`${title}: ${r.total} ponto${r.total===1?'':'s'} — ${r.cat}.`);
         closeModal();
       };
     }
   });
 }
 
-function openNIHSSCalc(onApply) {
-  const items = [
-    ['1a Nível de consciência',                 [['0','Alerta'],['1','Sonolento, despertável'],['2','Estupor'],['3','Coma']]],
-    ['1b Orientação (mês, idade)',              [['0','Ambas'],['1','Uma'],['2','Nenhuma']]],
-    ['1c Comandos (abrir olhos, fechar mão)',   [['0','Ambos'],['1','Um'],['2','Nenhum']]],
-    ['2 Olhar conjugado',                       [['0','Normal'],['1','Paresia parcial'],['2','Desvio forçado']]],
-    ['3 Campos visuais',                        [['0','Normal'],['1','Hemianopsia parcial'],['2','Hemianopsia completa'],['3','Cegueira bilateral']]],
-    ['4 Paresia facial',                        [['0','Normal'],['1','Mínima'],['2','Parcial'],['3','Completa']]],
-    ['5a Membro superior esquerdo',             [['0','Sem queda'],['1','Queda <10s'],['2','Algum esforço c/ gravidade'],['3','Sem esforço'],['4','Sem movimento']]],
-    ['5b Membro superior direito',              [['0','Sem queda'],['1','Queda <10s'],['2','Algum esforço c/ gravidade'],['3','Sem esforço'],['4','Sem movimento']]],
-    ['6a Membro inferior esquerdo',             [['0','Sem queda'],['1','Queda <5s'],['2','Algum esforço c/ gravidade'],['3','Sem esforço'],['4','Sem movimento']]],
-    ['6b Membro inferior direito',              [['0','Sem queda'],['1','Queda <5s'],['2','Algum esforço c/ gravidade'],['3','Sem esforço'],['4','Sem movimento']]],
-    ['7 Ataxia de membros',                     [['0','Ausente'],['1','Presente em 1 membro'],['2','Em 2 membros']]],
-    ['8 Sensibilidade',                         [['0','Normal'],['1','Hipoestesia leve/moderada'],['2','Anestesia']]],
-    ['9 Linguagem',                             [['0','Normal'],['1','Afasia leve/moderada'],['2','Afasia grave'],['3','Mutismo / afasia global']]],
-    ['10 Disartria',                            [['0','Normal'],['1','Leve a moderada'],['2','Grave / anártrico']]],
-    ['11 Extinção / negligência',               [['0','Ausente'],['1','Em 1 modalidade'],['2','Em mais de uma']]],
-  ];
-  const html = items.map((it, i) => `
-    <div class="form-row" style="margin-bottom:6px;">
-      <div class="form-group">
-        <label>${escapeHtml(it[0])}</label>
-        <select data-i="${i}">
-          ${it[1].map(o => `<option value="${o[0]}">${o[0]} — ${escapeHtml(o[1])}</option>`).join('')}
-        </select>
-      </div>
-    </div>`).join('');
+/* ---- PHQ-9 (depressão) ---- */
+function openPHQ9(onApply) {
+  _openLikertScale({
+    title:'PHQ-9',
+    intro:'Nas últimas 2 semanas, com que frequência o paciente foi incomodado por:',
+    options:[['0','Nenhum dia'],['1','Vários dias'],['2','Mais da metade dos dias'],['3','Quase todos os dias']],
+    items:[
+      'Pouco interesse ou prazer em fazer as coisas',
+      'Sentir-se para baixo, deprimido(a) ou sem perspectiva',
+      'Dificuldade para pegar ou manter o sono / dormir demais',
+      'Cansaço ou pouca energia',
+      'Falta de apetite ou comer demais',
+      'Sentir-se mal consigo, ou sentir que é um fracasso',
+      'Dificuldade de concentração',
+      'Lentificação ou agitação psicomotora perceptível',
+      'Pensamentos de que estaria melhor morto(a) ou de se machucar'
+    ],
+    footnote:'PHQ-9 ≥ 10 sugere depressão clinicamente significativa. Item 9 positivo exige avaliação de risco.',
+    categorize: s =>
+      s <= 4  ? 'mínima' :
+      s <= 9  ? 'leve' :
+      s <= 14 ? 'moderada' :
+      s <= 19 ? 'moderadamente grave' : 'grave',
+    onApply
+  });
+}
+
+/* ---- GAD-7 (ansiedade) ---- */
+function openGAD7(onApply) {
+  _openLikertScale({
+    title:'GAD-7',
+    intro:'Nas últimas 2 semanas, com que frequência o paciente foi incomodado por:',
+    options:[['0','Nenhum dia'],['1','Vários dias'],['2','Mais da metade dos dias'],['3','Quase todos os dias']],
+    items:[
+      'Sentir-se nervoso(a), ansioso(a) ou no limite',
+      'Não conseguir parar ou controlar as preocupações',
+      'Preocupar-se demais com diferentes coisas',
+      'Dificuldade em relaxar',
+      'Inquietação a ponto de não conseguir ficar parado(a)',
+      'Ficar facilmente irritado(a) ou aborrecido(a)',
+      'Sentir medo como se algo terrível fosse acontecer'
+    ],
+    footnote:'GAD-7 ≥ 10 indica ansiedade clinicamente significativa.',
+    categorize: s =>
+      s <= 4  ? 'mínima' :
+      s <= 9  ? 'leve' :
+      s <= 14 ? 'moderada' : 'grave',
+    onApply
+  });
+}
+
+/* ---- Epworth ---- */
+function openEpworth(onApply) {
+  _openLikertScale({
+    title:'Epworth',
+    intro:'Probabilidade de cochilar/adormecer nas situações abaixo (não apenas cansaço):',
+    options:[['0','Nenhuma'],['1','Pequena'],['2','Moderada'],['3','Alta']],
+    items:[
+      'Sentado(a) e lendo',
+      'Vendo televisão',
+      'Sentado(a) inativo em local público (teatro, reunião)',
+      'Como passageiro de carro por 1h sem parar',
+      'Deitado(a) à tarde para descansar',
+      'Sentado(a) conversando com alguém',
+      'Sentado(a) tranquilo após o almoço (sem álcool)',
+      'No carro parado por alguns minutos no trânsito'
+    ],
+    footnote:'≥ 10: sonolência diurna excessiva. ≥ 16: grave.',
+    categorize: s =>
+      s <= 9  ? 'sonolência normal' :
+      s <= 12 ? 'sonolência leve' :
+      s <= 15 ? 'sonolência moderada' : 'sonolência grave',
+    onApply
+  });
+}
+
+/* ---- EVA / NRS de dor ---- */
+function openEVA(onApply) {
   openModal({
-    title: 'NIHSS',
-    size: 'lg',
-    bodyHTML: `<div style="max-height:60vh;overflow-y:auto;padding-right:8px;">${html}</div>
-               <div class="calc-result" id="n-result"></div>`,
-    footHTML: `
+    title:'EVA / NRS — dor',
+    size:'md',
+    bodyHTML:`
+      <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:12px;">
+        Escala numérica de dor (0 = sem dor, 10 = pior dor imaginável).
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Intensidade atual <span id="eva-val" style="color:var(--gold);font-weight:500;">5</span>/10</label>
+          <input type="range" id="eva-r" min="0" max="10" step="1" value="5">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tipo / localização (opcional)</label>
+          <input id="eva-desc" placeholder="ex: cefaleia frontal pulsátil">
+        </div>
+      </div>
+      <div class="calc-result" id="eva-out"></div>
+    `,
+    footHTML:`
       <div style="flex:1"></div>
       <button class="btn-secondary" data-close>Cancelar</button>
-      <button class="btn-primary" id="n-apply">Inserir no exame</button>
+      <button class="btn-primary" id="eva-apply">Inserir</button>
     `,
-    onMount: (m) => {
-      const recompute = () => {
-        let total = 0;
-        m.querySelectorAll('select[data-i]').forEach(s => total += (+s.value));
-        let cat;
-        if (total === 0) cat = 'Sem déficit';
-        else if (total <= 4) cat = 'AVC leve';
-        else if (total <= 15) cat = 'AVC moderado';
-        else if (total <= 20) cat = 'AVC moderado a grave';
-        else cat = 'AVC grave';
-        m.querySelector('#n-result').innerHTML = `<strong>NIHSS ${total}</strong> — ${cat}`;
-        return { total, cat };
+    onMount:(m) => {
+      const r = m.querySelector('#eva-r');
+      const upd = () => {
+        const v = +r.value;
+        m.querySelector('#eva-val').textContent = v;
+        let cat = v === 0 ? 'sem dor' : v <= 3 ? 'leve' : v <= 6 ? 'moderada' : 'intensa';
+        m.querySelector('#eva-out').innerHTML = `<strong>EVA ${v}/10</strong> — dor ${cat}.`;
       };
-      m.querySelectorAll('select[data-i]').forEach(s => s.onchange = recompute);
-      recompute();
-      m.querySelector('#n-apply').onclick = () => {
-        const r = recompute();
-        onApply(`NIHSS: ${r.total} pontos — ${r.cat}.`);
+      r.oninput = upd; upd();
+      m.querySelector('#eva-apply').onclick = () => {
+        const v = +r.value;
+        const desc = m.querySelector('#eva-desc').value.trim();
+        let cat = v === 0 ? 'sem dor' : v <= 3 ? 'leve' : v <= 6 ? 'moderada' : 'intensa';
+        onApply(`EVA: ${v}/10 — dor ${cat}${desc ? ` (${desc})` : ''}.`);
         closeModal();
       };
     }
+  });
+}
+
+/* ---- Hoehn & Yahr ---- */
+function openHoehnYahr(onApply) {
+  const stages = [
+    ['1', 'Estágio 1 — comprometimento unilateral, sem incapacidade funcional'],
+    ['1.5', 'Estágio 1,5 — envolvimento unilateral e axial'],
+    ['2', 'Estágio 2 — comprometimento bilateral sem alteração do equilíbrio'],
+    ['2.5', 'Estágio 2,5 — bilateral leve, com recuperação no teste do empurrão'],
+    ['3', 'Estágio 3 — bilateral com instabilidade postural, independente'],
+    ['4', 'Estágio 4 — incapacitante grave, ainda capaz de andar/ficar de pé sem ajuda'],
+    ['5', 'Estágio 5 — confinado à cadeira/cama sem ajuda']
+  ];
+  openModal({
+    title:'Hoehn & Yahr modificada',
+    size:'md',
+    bodyHTML:`
+      <div class="form-row">
+        <div class="form-group">
+          <label>Estágio</label>
+          <select id="hy-s">
+            ${stages.map(s => `<option value="${s[0]}">${escapeHtml(s[1])}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="calc-result" id="hy-out"></div>
+    `,
+    footHTML:`
+      <div style="flex:1"></div>
+      <button class="btn-secondary" data-close>Cancelar</button>
+      <button class="btn-primary" id="hy-apply">Inserir</button>
+    `,
+    onMount:(m) => {
+      const sel = m.querySelector('#hy-s');
+      const out = m.querySelector('#hy-out');
+      const upd = () => {
+        const lbl = sel.options[sel.selectedIndex].text;
+        out.innerHTML = `<strong>Hoehn & Yahr ${sel.value}</strong> — ${escapeHtml(lbl)}`;
+      };
+      sel.onchange = upd; upd();
+      m.querySelector('#hy-apply').onclick = () => {
+        const lbl = sel.options[sel.selectedIndex].text;
+        onApply(`Hoehn & Yahr: estágio ${sel.value} — ${lbl}.`);
+        closeModal();
+      };
+    }
+  });
+}
+
+/* ---- MEEM (Folstein) — pontuação direta ---- */
+function openMEEM(onApply) {
+  const sections = [
+    ['Orientação temporal (ano, estação, mês, dia, dia da semana)', 5],
+    ['Orientação espacial (estado, cidade, bairro, local, andar)', 5],
+    ['Memória imediata (3 palavras)', 3],
+    ['Atenção e cálculo (subtração 100−7 ×5 ou soletrar MUNDO)', 5],
+    ['Memória de evocação (3 palavras)', 3],
+    ['Linguagem — nomeação (relógio e caneta)', 2],
+    ['Linguagem — repetição ("nem aqui, nem ali, nem lá")', 1],
+    ['Linguagem — comando em 3 estágios', 3],
+    ['Linguagem — leitura/execução ("FECHE OS OLHOS")', 1],
+    ['Linguagem — escrita de uma frase', 1],
+    ['Habilidade visuoconstrutiva — cópia de pentágonos', 1],
+  ];
+  const html = sections.map((s, i) => `
+    <div class="form-row" style="margin-bottom:4px;">
+      <div class="form-group">
+        <label>${i + 1}. ${escapeHtml(s[0])}  (0–${s[1]})</label>
+        <input type="number" min="0" max="${s[1]}" value="${s[1]}" data-i="${i}" data-max="${s[1]}">
+      </div>
+    </div>`).join('');
+  openModal({
+    title:'MEEM — Mini-Exame do Estado Mental',
+    size:'lg',
+    bodyHTML:`
+      <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:12px;">Insira a pontuação obtida em cada item (máx. 30).</p>
+      <div style="max-height:55vh;overflow-y:auto;padding-right:8px;">${html}</div>
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label>Escolaridade</label>
+          <select id="meem-edu">
+            <option value="analfabeto">Analfabeto</option>
+            <option value="1-4">1 a 4 anos</option>
+            <option value="5-8" selected>5 a 8 anos</option>
+            <option value="9+">9+ anos</option>
+          </select>
+        </div>
+      </div>
+      <div class="calc-result" id="meem-out"></div>
+      <p class="form-hint" style="margin-top:8px;">
+        Notas de corte sugeridas (Brucki et al., 2003): analfabeto &lt; 20; 1–4a &lt; 25; 5–8a &lt; 26; 9+a &lt; 28.
+      </p>
+    `,
+    footHTML:`
+      <div style="flex:1"></div>
+      <button class="btn-secondary" data-close>Cancelar</button>
+      <button class="btn-primary" id="meem-apply">Inserir resultado</button>
+    `,
+    onMount:(m) => {
+      const inputs = m.querySelectorAll('input[data-i]');
+      const eduSel = m.querySelector('#meem-edu');
+      const out = m.querySelector('#meem-out');
+      const cuts = { 'analfabeto':20, '1-4':25, '5-8':26, '9+':28 };
+      const calc = () => {
+        let total = 0;
+        inputs.forEach(i => {
+          const max = +i.dataset.max;
+          let v = +i.value || 0; if (v < 0) v = 0; if (v > max) v = max;
+          total += v;
+        });
+        const cut = cuts[eduSel.value];
+        const flag = total < cut ? `<strong>abaixo do corte para ${eduSel.value} anos (${cut})</strong>` : `acima/no corte para ${eduSel.value} anos (${cut})`;
+        out.innerHTML = `<strong>MEEM ${total}/30</strong> — ${flag}.`;
+        return { total, cut, edu: eduSel.value };
+      };
+      inputs.forEach(i => i.oninput = calc);
+      eduSel.onchange = calc;
+      calc();
+      m.querySelector('#meem-apply').onclick = () => {
+        const r = calc();
+        const flag = r.total < r.cut ? 'abaixo do corte' : 'sem rebaixamento pelo corte';
+        onApply(`MEEM: ${r.total}/30 (escolaridade ${r.edu} anos; corte ${r.cut}) — ${flag}.`);
+        closeModal();
+      };
+    }
+  });
+}
+
+/* ---- MIDAS ---- */
+function openMIDAS(onApply) {
+  const items = [
+    'Dias perdidos no trabalho/escola por cefaleia',
+    'Dias com produtividade reduzida em ≥50% no trabalho/escola',
+    'Dias perdidos em afazeres domésticos',
+    'Dias com produtividade reduzida em ≥50% em afazeres domésticos',
+    'Dias perdidos de atividades familiares/sociais/lazer'
+  ];
+  openModal({
+    title:'MIDAS',
+    size:'md',
+    bodyHTML:`
+      <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:12px;">Nos últimos 3 meses, número de dias em cada situação:</p>
+      ${items.map((q,i) => `
+        <div class="form-row" style="margin-bottom:4px;">
+          <div class="form-group">
+            <label>${i+1}. ${escapeHtml(q)}</label>
+            <input type="number" min="0" value="0" data-i="${i}">
+          </div>
+        </div>`).join('')}
+      <div class="calc-result" id="md-out"></div>
+    `,
+    footHTML:`
+      <div style="flex:1"></div>
+      <button class="btn-secondary" data-close>Cancelar</button>
+      <button class="btn-primary" id="md-apply">Inserir resultado</button>
+    `,
+    onMount:(m) => {
+      const ins = m.querySelectorAll('input[data-i]');
+      const calc = () => {
+        let total = 0;
+        ins.forEach(i => total += Math.max(0, +i.value || 0));
+        let cat;
+        if (total <= 5) cat = 'Grau I — incapacidade pouca ou nenhuma';
+        else if (total <= 10) cat = 'Grau II — incapacidade leve';
+        else if (total <= 20) cat = 'Grau III — incapacidade moderada';
+        else cat = 'Grau IV — incapacidade severa';
+        m.querySelector('#md-out').innerHTML = `<strong>MIDAS ${total}</strong> — ${cat}`;
+        return { total, cat };
+      };
+      ins.forEach(i => i.oninput = calc);
+      calc();
+      m.querySelector('#md-apply').onclick = () => {
+        const r = calc();
+        onApply(`MIDAS: ${r.total} dias — ${r.cat}.`);
+        closeModal();
+      };
+    }
+  });
+}
+
+/* ---- HIT-6 ---- */
+function openHIT6(onApply) {
+  _openLikertScale({
+    title:'HIT-6',
+    intro:'Frequência das experiências causadas pela cefaleia:',
+    options:[['6','Sempre'],['8','Muito frequente'],['10','Algumas vezes'],['11','Raramente'],['13','Nunca']],
+    items:[
+      'Quando tem dor de cabeça, ela é grave?',
+      'A dor limita atividades diárias (trabalho, escola, casa, social)?',
+      'Sente vontade de deitar quando tem cefaleia?',
+      'Sente-se cansado(a) demais para atividades por causa da cefaleia?',
+      'Sente-se irritado(a) por causa da cefaleia?',
+      'A cefaleia limita sua capacidade de concentração?'
+    ],
+    categorize: s =>
+      s <= 49 ? 'pouco/sem impacto' :
+      s <= 55 ? 'algum impacto' :
+      s <= 59 ? 'impacto substancial' : 'impacto severo',
+    onApply
   });
 }
 
@@ -1459,11 +1689,29 @@ function openDocForm(type, doc) {
   else if (type === 'exames') {
     defaultTitle = 'Solicitação de exames';
     const exams = c.exams || [{ name:'' }];
+    const groups = window.EXAM_GROUPS || [];
     bodyHTML = `
+      <div class="form-row">
+        <div class="form-group">
+          <label>Pacotes prontos (por queixa / síndrome)</label>
+          <div class="btn-row" style="gap:6px;">
+            <select id="ex-group-sel" style="flex:1;min-width:240px;">
+              <option value="">— escolher pacote —</option>
+              ${groups.map((g, i) => `<option value="${i}">${escapeHtml(g.name)}</option>`).join('')}
+            </select>
+            <button type="button" class="btn-secondary" id="btn-apply-group">Adicionar pacote</button>
+            <button type="button" class="btn-ghost" id="btn-replace-group" title="Substituir lista atual">Substituir</button>
+          </div>
+          <span class="form-hint">"Adicionar" anexa ao final; "Substituir" troca a lista pelo pacote.</span>
+        </div>
+      </div>
       <div id="exams-list">
         ${exams.map((e,i) => examEditorHTML(e,i)).join('')}
       </div>
-      <button type="button" class="btn-secondary" id="btn-add-exam" style="margin-bottom:14px;">+ Adicionar exame</button>
+      <button type="button" class="btn-secondary" id="btn-add-exam" style="margin-bottom:14px;">+ Adicionar exame manual</button>
+      <datalist id="exam-catalog">
+        ${(window.EXAM_CATALOG || []).map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}
+      </datalist>
       <div class="form-row">
         <div class="form-group">
           <label>Indicação clínica</label>
@@ -1511,6 +1759,16 @@ function openDocForm(type, doc) {
           <input type="number" id="at-days" min="0" value="${c.days ?? ''}">
         </div>
       </div>
+      <div class="form-row cols-2" id="at-companion-row" ${c.subtype==='acompanhante'?'':'hidden'}>
+        <div class="form-group">
+          <label>Nome do acompanhante *</label>
+          <input id="at-companion-name" value="${escapeHtml(c.companion_name || '')}" placeholder="Nome completo do acompanhante">
+        </div>
+        <div class="form-group">
+          <label>Vínculo com o paciente</label>
+          <input id="at-companion-rel" value="${escapeHtml(c.companion_relation || '')}" placeholder="ex: filho(a), cônjuge, mãe">
+        </div>
+      </div>
       <div class="form-row cols-2">
         <div class="form-group">
           <label>CID-10 (opcional)</label>
@@ -1534,6 +1792,8 @@ function openDocForm(type, doc) {
     getContent = (m) => ({
       subtype: m.querySelector('#at-subtype').value,
       days: m.querySelector('#at-days').value ? +m.querySelector('#at-days').value : null,
+      companion_name: m.querySelector('#at-companion-name')?.value.trim() || '',
+      companion_relation: m.querySelector('#at-companion-rel')?.value.trim() || '',
       cid: m.querySelector('#at-cid').value.trim(),
       include_cid: m.querySelector('#at-include-cid').checked,
       free_text: m.querySelector('#at-free').value.trim()
@@ -1545,42 +1805,12 @@ function openDocForm(type, doc) {
     bodyHTML = `
       <div class="form-row">
         <div class="form-group">
-          <label>Anamnese / contexto clínico</label>
-          <textarea id="lo-anamnese" style="min-height:90px;">${escapeHtml(c.anamnese || '')}</textarea>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Exame neurológico</label>
-          <textarea id="lo-exam" style="min-height:90px;">${escapeHtml(c.exam || '')}</textarea>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Exames complementares</label>
-          <textarea id="lo-comp">${escapeHtml(c.complementary || '')}</textarea>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Conclusão / diagnóstico</label>
-          <textarea id="lo-conclusion" style="min-height:90px;">${escapeHtml(c.conclusion || '')}</textarea>
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>CID-10 (separados por vírgula)</label>
-          <input id="lo-cids" value="${escapeHtml((c.cids || []).join(', '))}">
+          <label>Conteúdo do laudo</label>
+          <textarea id="lo-body" style="min-height:340px;" placeholder="Digite o laudo livremente.">${escapeHtml(c.body || '')}</textarea>
         </div>
       </div>
     `;
-    getContent = (m) => ({
-      anamnese: m.querySelector('#lo-anamnese').value.trim(),
-      exam: m.querySelector('#lo-exam').value.trim(),
-      complementary: m.querySelector('#lo-comp').value.trim(),
-      conclusion: m.querySelector('#lo-conclusion').value.trim(),
-      cids: m.querySelector('#lo-cids').value.split(',').map(s => s.trim()).filter(Boolean)
-    });
+    getContent = (m) => ({ body: m.querySelector('#lo-body').value.trim() });
   }
 
   else if (type === 'relatorio') {
@@ -1639,6 +1869,46 @@ function openDocForm(type, doc) {
         wireExamRemovers(m);
       };
       wireExamRemovers(m);
+
+      // pacotes prontos
+      const groupSel = m.querySelector('#ex-group-sel');
+      const applyGroup = (replace) => {
+        if (!groupSel) return;
+        const idx = groupSel.value;
+        if (idx === '') return;
+        const grp = (window.EXAM_GROUPS || [])[+idx];
+        if (!grp) return;
+        const list = m.querySelector('#exams-list');
+        if (replace) list.innerHTML = '';
+        else {
+          // remove placeholder vazio único, se existir
+          if (list.children.length === 1) {
+            const only = list.firstElementChild;
+            const nameInput = only.querySelector('[data-f=name]');
+            if (nameInput && !nameInput.value.trim()) list.innerHTML = '';
+          }
+        }
+        grp.exams.forEach(e => {
+          list.insertAdjacentHTML('beforeend', examEditorHTML(e, list.children.length));
+        });
+        wireExamRemovers(m);
+        // sugere indicação se vazia
+        const ind = m.querySelector('#ex-indication');
+        if (ind && !ind.value.trim()) ind.value = `Investigação de ${grp.name.toLowerCase()}.`;
+      };
+      const btnApply = m.querySelector('#btn-apply-group');
+      const btnReplace = m.querySelector('#btn-replace-group');
+      if (btnApply) btnApply.onclick = () => applyGroup(false);
+      if (btnReplace) btnReplace.onclick = () => applyGroup(true);
+
+      // mostrar/ocultar bloco do acompanhante conforme tipo do atestado
+      const subtypeSel = m.querySelector('#at-subtype');
+      if (subtypeSel) {
+        subtypeSel.onchange = () => {
+          const row = m.querySelector('#at-companion-row');
+          if (row) row.hidden = subtypeSel.value !== 'acompanhante';
+        };
+      }
 
       m.querySelector('#btn-save-doc').onclick = async () => {
         const payload = {
@@ -1715,7 +1985,7 @@ function examEditorHTML(e, i) {
       <div class="form-row cols-2">
         <div class="form-group">
           <label>Exame</label>
-          <input data-f="name" value="${escapeHtml(e.name || '')}" placeholder="ex: Ressonância magnética de crânio">
+          <input data-f="name" list="exam-catalog" value="${escapeHtml(e.name || '')}" placeholder="Comece a digitar para autocomplete">
         </div>
         <div class="form-group">
           <label>Especificações</label>
@@ -1874,7 +2144,7 @@ function generateDocPDF(d) {
   const label = TYPE_LABELS[d.type] || 'Documento';
 
   if (d.type === 'receita_especial') {
-    pdfReceita(d, label, true);
+    pdfReceitaEspecial(d);
   } else if (d.type === 'receita_simples') {
     pdfReceita(d, label, false);
   } else if (d.type === 'exames') {
@@ -1886,6 +2156,221 @@ function generateDocPDF(d) {
   } else if (d.type === 'relatorio') {
     pdfRelatorio(d, label);
   }
+}
+
+/* ===========================================================
+   PDF — Receita ESPECIAL (Portaria 344/98)
+   Layout: A4 paisagem, 2 vias lado a lado.
+   Cada via segue o modelo oficial (boxes EMITENTE / CONTROLE
+   ESPECIAL / COMPRADOR / FORNECEDOR).
+=========================================================== */
+function pdfReceitaEspecial(d) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+  const W = 297, H = 210;
+  const HALF = W / 2;
+  const c = d.content || {};
+
+  drawReceitaEspecialVia(doc, 0,    d, c);
+  // linha tracejada divisória entre as vias
+  doc.setDrawColor(160, 160, 160);
+  doc.setLineWidth(0.2);
+  doc.setLineDashPattern([1.2, 1.2], 0);
+  doc.line(HALF, 8, HALF, H - 8);
+  doc.setLineDashPattern([], 0);
+  drawReceitaEspecialVia(doc, HALF, d, c);
+
+  const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
+  doc.save(`receita-especial-${safe}-${d.issue_date}.pdf`);
+}
+
+function drawReceitaEspecialVia(doc, xOff, d, c) {
+  const PAGE_H = 210;
+  const VW     = 148.5;            // largura da via
+  const M      = 8;                // margem dentro da via
+  const innerW = VW - 2 * M;       // largura útil
+  const xLeft  = xOff + M;
+  const cx     = xOff + VW / 2;    // centro da via
+
+  // ----- 1) CABEÇALHO -----
+  let y = 14;
+  doc.setTextColor(13, 27, 42);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('Dr. Brendow Mártin', cx, y, { align: 'center' });
+  y += 5;
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(10);
+  doc.setTextColor(100, 110, 125);
+  doc.text('Neurologista', cx, y, { align: 'center' });
+  y += 1.5;
+  // linha decorativa dourada centralizada
+  doc.setDrawColor(184, 154, 94);
+  doc.setLineWidth(0.5);
+  doc.line(cx - 14, y, cx + 14, y);
+  y += 4;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(120, 130, 145);
+  doc.text(`CRM-CE ${DOCTOR_CRM_NUMBER}   ·   RQE ${DOCTOR_RQE}`, cx, y, { align: 'center' });
+  y += 6;
+
+  // ----- 2) BOXES SUPERIORES -----
+  const boxLW = 86, boxRW = innerW - boxLW - 3, boxH = 36;
+  const xR = xLeft + boxLW + 3;
+
+  doc.setDrawColor(40, 50, 65);
+  doc.setLineWidth(0.45);
+  doc.rect(xLeft, y, boxLW, boxH);
+  doc.rect(xR,    y, boxRW, boxH);
+
+  // títulos dos boxes
+  doc.setFont('helvetica', 'bolditalic');
+  doc.setFontSize(9);
+  doc.setTextColor(13, 27, 42);
+  doc.text('IDENTIFICAÇÃO DO EMITENTE',     xLeft + boxLW / 2, y + 5, { align: 'center' });
+  doc.text('RECEITUÁRIO CONTROLE ESPECIAL', xR    + boxRW / 2, y + 5, { align: 'center' });
+
+  // campos do EMITENTE
+  doc.setFontSize(8.5);
+  let yy = y + 11;
+  const drawField = (label, value, x, yi, labelW = 18) => {
+    doc.setFont('helvetica', 'bolditalic');
+    doc.setTextColor(13, 27, 42);
+    doc.text(label, x + 2, yi);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(60, 75, 95);
+    doc.text(value || '', x + 2 + labelW, yi);
+  };
+  drawField('Nome:',         DOCTOR_LEGAL_NAME,                       xLeft, yy, 14); yy += 5;
+  drawField('CRM:',          `${DOCTOR_CRM_NUMBER} ${DOCTOR_CRM_UF}`, xLeft, yy, 14); yy += 5;
+  drawField('Endereço:',     DOCTOR_ADDRESS,                          xLeft, yy, 18); yy += 5;
+  drawField('Telefone:',     DOCTOR_PHONE,                            xLeft, yy, 17); yy += 5;
+  drawField('Cidade e UF:',  DOCTOR_CITY,                             xLeft, yy, 22);
+
+  // campos do CONTROLE ESPECIAL
+  yy = y + 11;
+  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(8.5);
+  doc.setTextColor(13, 27, 42);
+  doc.text('DATA:', xR + 2, yy);
+  doc.setFont('helvetica', 'italic');
+  doc.setTextColor(60, 75, 95);
+  doc.text(fmtDate(d.issue_date), xR + 2 + 12, yy);
+  yy += 8;
+  doc.setFont('helvetica', 'italic');
+  doc.text('1ª via — farmácia', xR + 2, yy); yy += 5;
+  doc.text('2ª via — paciente', xR + 2, yy);
+
+  // ----- 3) LINHA DE ASSINATURA (sob box CONTROLE) -----
+  let yAfterBoxes = y + boxH + 7;
+  doc.setDrawColor(60, 70, 90);
+  doc.setLineWidth(0.4);
+  doc.line(xR, yAfterBoxes, xR + boxRW, yAfterBoxes);
+  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(8);
+  doc.setTextColor(13, 27, 42);
+  doc.text('ASSINATURA', xR + boxRW / 2, yAfterBoxes + 4, { align: 'center' });
+
+  // ----- 4) BLOCO DO PACIENTE (à esquerda, alinhado com a assinatura) -----
+  let yp = yAfterBoxes - 2;
+  doc.setFontSize(9);
+  drawField('Paciente:', currentPatient.full_name || '',     xLeft, yp, 17); yp += 5;
+  drawField('CPF:',      currentPatient.cpf || '',           xLeft, yp, 9);  yp += 5;
+  drawField('Endereço:', currentPatient.address || '',       xLeft, yp, 17);
+
+  // ----- 5) PRESCRIÇÕES -----
+  let yMed = Math.max(yp, yAfterBoxes + 6) + 7;
+  const xRightLimit = xLeft + innerW;
+  doc.setTextColor(13, 27, 42);
+
+  (c.medications || []).forEach((m) => {
+    if (yMed > PAGE_H - 50) return; // limite — caiba acima dos boxes inferiores
+    const nameStr = `${m.name || ''}${m.concentration ? ', ' + m.concentration : ''}`;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10);
+    doc.text(nameStr, xLeft, yMed);
+    const nameW = doc.getTextWidth(nameStr);
+
+    const usoStr = 'uso contínuo';
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5);
+    const usoW = doc.getTextWidth(usoStr);
+
+    // pontilhado entre nome e "uso contínuo"
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+    doc.setTextColor(120, 130, 145);
+    let xd = xLeft + nameW + 2;
+    const xdEnd = xRightLimit - usoW - 1.5;
+    while (xd < xdEnd) { doc.text('.', xd, yMed); xd += 1.3; }
+    doc.setTextColor(13, 27, 42);
+
+    doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5);
+    doc.text(usoStr, xRightLimit - usoW, yMed);
+    yMed += 5;
+
+    // posologia
+    if (m.posology) {
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(10);
+      const lines = doc.splitTextToSize(m.posology, innerW);
+      lines.forEach(ln => { doc.text(ln, xLeft, yMed); yMed += 4.5; });
+    }
+    if (m.quantity) {
+      doc.setFont('helvetica', 'italic'); doc.setFontSize(9);
+      doc.setTextColor(80, 95, 115);
+      doc.text(`Quantidade: ${m.quantity}`, xLeft, yMed);
+      doc.setTextColor(13, 27, 42);
+      yMed += 4.5;
+    }
+    yMed += 3;
+  });
+
+  if (c.instructions) {
+    if (yMed < PAGE_H - 55) {
+      yMed += 3;
+      doc.setFont('helvetica','bold'); doc.setFontSize(9);
+      doc.text('Orientações:', xLeft, yMed); yMed += 4;
+      doc.setFont('helvetica','italic'); doc.setFontSize(9.5);
+      const lines = doc.splitTextToSize(c.instructions, innerW);
+      for (const ln of lines) {
+        if (yMed > PAGE_H - 50) break;
+        doc.text(ln, xLeft, yMed); yMed += 4.3;
+      }
+    }
+  }
+
+  // ----- 6) BOXES INFERIORES (Comprador + Fornecedor) -----
+  const bottomY = PAGE_H - 42;
+  const compW = (innerW - 4) / 2;
+  doc.setDrawColor(40, 50, 65);
+  doc.setLineWidth(0.45);
+  doc.rect(xLeft,             bottomY, compW, 30);
+  doc.rect(xLeft + compW + 4, bottomY, compW, 30);
+
+  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(9);
+  doc.setTextColor(13, 27, 42);
+  doc.text('IDENTIFICAÇÃO DO COMPRADOR',   xLeft + compW / 2,           bottomY + 5, { align: 'center' });
+  doc.text('IDENTIFICAÇÃO DO FORNECEDOR',  xLeft + compW + 4 + compW/2, bottomY + 5, { align: 'center' });
+
+  // Comprador — labels
+  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(8);
+  let yc = bottomY + 10;
+  ['Nome:', 'RG:', 'Endereço:', 'Telefone:', 'Cidade e UF:'].forEach(lbl => {
+    doc.text(lbl, xLeft + 2, yc);
+    yc += 4;
+  });
+
+  // Fornecedor — DATA + linha + assinatura do farmacêutico
+  const xF = xLeft + compW + 4;
+  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(9);
+  doc.text('DATA', xF + compW / 2, bottomY + 13, { align: 'center' });
+  doc.setLineWidth(0.4);
+  doc.line(xF + 6, bottomY + 18, xF + compW - 6, bottomY + 18);
+  doc.setFontSize(8.5);
+  doc.text('ASSINATURA DO FARMACÊUTICO', xF + compW / 2, bottomY + 22, { align: 'center' });
+
+  // ----- 7) RODAPÉ (cidade / e-mail) -----
+  doc.setFont('helvetica', 'italic'); doc.setFontSize(8);
+  doc.setTextColor(140, 150, 165);
+  doc.text(DOCTOR_CITY,            xLeft + innerW, PAGE_H - 9, { align: 'right' });
+  doc.text(`Email: ${DOCTOR_EMAIL}`, xLeft + innerW, PAGE_H - 5.5, { align: 'right' });
+  doc.setTextColor(13, 27, 42);
 }
 
 function pdfReceita(d, label, isSpecial) {
@@ -2008,7 +2493,12 @@ function pdfAtestado(d, label) {
   } else if (c.subtype === 'comparecimento') {
     body = `Atesto que o(a) Sr(a). ${p.full_name}${p.cpf ? `, CPF ${p.cpf}` : ''} compareceu a esta consulta médica em ${fmtDate(d.issue_date)}, das ___h às ___h, para fins de comprovação.`;
   } else if (c.subtype === 'acompanhante') {
-    body = `Atesto que o(a) Sr(a). ${p.full_name}${p.cpf ? `, CPF ${p.cpf}` : ''} compareceu a esta consulta médica na data de ${fmtDate(d.issue_date)} na qualidade de acompanhante, sendo necessária a sua presença.`;
+    const ac = (c.companion_name || '').trim();
+    const rel = (c.companion_relation || '').trim();
+    body = `Atesto que o(a) Sr(a). ${ac || '___________________________________'}` +
+      (rel ? `, ${rel} do(a) paciente ${p.full_name}` : `, acompanhante do(a) paciente ${p.full_name}`) +
+      (p.cpf ? ` (CPF ${p.cpf})` : '') +
+      `, compareceu a esta consulta médica em ${fmtDate(d.issue_date)}, das ___h às ___h, sendo necessária a sua presença.`;
   } else if (c.subtype === 'aptidao') {
     body = `Atesto, para os devidos fins, que o(a) Sr(a). ${p.full_name}${p.cpf ? `, CPF ${p.cpf}` : ''}, após avaliação clínica nesta data (${fmtDate(d.issue_date)}), encontra-se apto(a) para suas atividades habituais, salvo intercorrências.`;
   }
@@ -2037,20 +2527,8 @@ function pdfLaudo(d, label) {
   y += 10;
   y = pdfPatientBlock(doc, y, currentPatient);
 
-  const sec = (lbl, val) => {
-    if (!val) return;
-    if (y > 250) { doc.addPage(); y = 24; }
-    doc.setFont('helvetica','bold'); doc.setFontSize(10);
-    doc.text(lbl, M, y); y += 4;
-    doc.setDrawColor(184,154,94); doc.line(M, y, M + 50, y); y += 4;
-    doc.setFont('helvetica','normal'); doc.setFontSize(10);
-    y = pdfWrappedText(doc, val, M, y, W - 2*M); y += 3;
-  };
-  sec('Anamnese / contexto clínico', c.anamnese);
-  sec('Exame neurológico', c.exam);
-  sec('Exames complementares', c.complementary);
-  sec('Conclusão', c.conclusion);
-  if ((c.cids || []).length) sec('CID-10', c.cids.join(', '));
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  y = pdfWrappedText(doc, c.body || '', M, y, W - 2*M, 6);
 
   pdfFooter(doc);
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();

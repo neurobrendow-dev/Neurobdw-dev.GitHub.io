@@ -223,6 +223,31 @@ permalink: /medico/
   .entry-grid dt { color: var(--gray); font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; }
   .entry-grid dd { color: var(--navy); margin-bottom: 6px; }
 
+  /* Home cards */
+  .home-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 22px; margin-top: 22px;
+  }
+  .home-card {
+    background: #fff; border: 1px solid #d8e4f0; border-top: 3px solid var(--gold);
+    padding: 32px 28px; cursor: pointer; transition: all 0.18s;
+    box-shadow: 0 8px 24px rgba(13,27,42,0.06);
+    text-decoration: none; color: var(--navy); display: block;
+    font-family: inherit; text-align: left; width: 100%;
+  }
+  .home-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 36px rgba(13,27,42,0.12);
+    border-color: var(--gold-light);
+  }
+  .home-card .ic { font-size: 2rem; display: block; margin-bottom: 14px; }
+  .home-card h3 {
+    font-family: var(--font-serif); font-size: 1.5rem; font-weight: 300;
+    margin-bottom: 6px;
+  }
+  .home-card h3 em { font-style: italic; color: var(--steel); }
+  .home-card p { font-size: 0.88rem; color: #5a6f85; line-height: 1.55; }
+
   .empty-state { text-align: center; padding: 56px 20px; color: #7a8a9c; font-size: 0.95rem; }
   .loading {
     display: flex; align-items: center; justify-content: center;
@@ -278,6 +303,26 @@ permalink: /medico/
       </div>
       <button type="submit" class="btn-primary btn-full">Entrar</button>
     </form>
+  </div>
+</main>
+
+<!-- HOME: escolha entre prontuário e diário -->
+<main class="app-wrap" id="view-home" hidden>
+  <div class="card">
+    <h2>Olá, <em id="home-greet">médico(a)</em></h2>
+    <p class="subtitle">Selecione uma área para acessar.</p>
+    <div class="home-grid">
+      <a class="home-card" href="/medico/prontuario/">
+        <span class="ic">📋</span>
+        <h3>Prontuário <em>ambulatorial</em></h3>
+        <p>Atendimentos, anamnese, evolução, receituários, atestados, laudos e relatórios.</p>
+      </a>
+      <button class="home-card" id="card-diario" type="button">
+        <span class="ic">📔</span>
+        <h3>Diário de <em>cefaleia</em></h3>
+        <p>Pacientes do app de diário, gráficos de intensidade, questionários (MIDAS/HIT-6) e relatório.</p>
+      </button>
+    </div>
   </div>
 </main>
 
@@ -446,7 +491,8 @@ async function init(){
   else showAuth();
   sb.auth.onAuthStateChange((e, s) => { if (e === 'SIGNED_OUT') showAuth(); });
 }
-function showAuth(){ show('view-auth'); hide('view-app'); $('topbar-actions').innerHTML = ''; }
+function showAuth(){ show('view-auth'); hide('view-home'); hide('view-app'); $('topbar-actions').innerHTML = ''; }
+function showHome(){ hide('view-auth'); hide('view-app'); show('view-home'); }
 
 async function onSignedIn(user){
   currentUser = user;
@@ -458,15 +504,25 @@ async function onSignedIn(user){
     return;
   }
   currentProfile = profile;
-  hide('view-auth'); show('view-app');
+  $('home-greet').textContent = `Dr(a). ${profile.full_name.split(' ')[0]}`;
+  renderTopbar();
+  showHome();
+}
+
+function renderTopbar(){
   $('topbar-actions').innerHTML = `
-    <a class="btn-link" href="/medico/prontuario/">Prontuário →</a>
-    <span class="topbar-user">Dr(a). ${profile.full_name.split(' ')[0]}</span>
+    <button class="btn-link" id="btn-home">Início</button>
+    <span class="topbar-user">Dr(a). ${currentProfile.full_name.split(' ')[0]}</span>
     <button class="btn-link" id="btn-logout">Sair</button>
   `;
+  $('btn-home').onclick = showHome;
   $('btn-logout').onclick = async () => { await sb.auth.signOut(); };
-  await loadPatients();
 }
+
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('#card-diario');
+  if (c) { hide('view-home'); show('view-app'); loadPatients(); }
+});
 
 $('form-login').onsubmit = async (e) => {
   e.preventDefault();
