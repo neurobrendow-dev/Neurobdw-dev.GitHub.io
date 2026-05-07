@@ -1,13 +1,13 @@
 ---
 layout: post
-title: "Emgality saiu do Brasil: o que muda no tratamento da enxaqueca?"
+title: "Emgality saiu do Brasil: o que muda no tratamento da enxaqueca e da Cefaleia em Salvas?"
 description: "Emgality (galcanezumabe) teve descontinuação comunicada no Brasil em maio de 2026. Entenda o que isso significa e como planejar a transição do tratamento."
 date: 2026-05-07 09:00:00 -0300
 category: "Cefaleias"
 tags: [Emgality, galcanezumabe, enxaqueca, cefaleia em salvas, anti-CGRP, tratamento da enxaqueca, neurologista Fortaleza]
 reading_time: 7
-cover: /assets/img/posts/pacienteenxaqueca.webp
-image: /assets/img/posts/pacienteenxaqueca.webp
+cover: /assets/img/posts/emgality.webp
+image: /assets/img/posts/emgality.webp
 author: "Dr. Brendow Mártin"
 ---
 
@@ -85,7 +85,7 @@ O fremanezumabe (Ajovy®) é outro anticorpo monoclonal anti-CGRP aprovado para 
 
 Mesmo sendo da mesma classe, os medicamentos não são idênticos. Há diferenças de dose, apresentação, intervalo de aplicação, cobertura por planos e disponibilidade em farmácias.
 
-### Toxina botulínica tipo A
+### Toxina botulínica tipo A (Botox®)
 
 Para pacientes com **enxaqueca crônica**, definida por 15 ou mais dias de cefaleia por mês, a toxina botulínica tipo A continua sendo uma opção importante, com aplicação em pontos específicos da cabeça e região cervical, geralmente a cada 12 semanas.
 
