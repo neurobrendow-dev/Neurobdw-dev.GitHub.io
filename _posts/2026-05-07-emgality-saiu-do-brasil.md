@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Emgality saiu do Brasil: o que muda no tratamento da enxaqueca e da Cefaleia em Salvas?"
+title: "Emgality saiu do Brasil: o que muda no tratamento da Enxaqueca e da Cefaleia em Salvas?"
 description: "Emgality (galcanezumabe) teve descontinuação comunicada no Brasil em maio de 2026. Entenda o que isso significa e como planejar a transição do tratamento."
 date: 2026-05-07 09:00:00 -0300
 category: "Cefaleias"
