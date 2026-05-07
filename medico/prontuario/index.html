@@ -15,6 +15,7 @@ permalink: /medico/prontuario/
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="cid10.js"></script>
+<script src="medicamentos.js"></script>
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
@@ -326,7 +327,7 @@ permalink: /medico/prontuario/
     <a href="/" aria-label="Voltar para o site">
       <img src="/images/logo.webp" alt="Dr. Brendow Mártin">
     </a>
-    <span class="topbar-tag">Prontuário</span>
+    <span class="topbar-tag">Prontuário Ambulatorial</span>
   </div>
   <div class="topbar-actions" id="topbar-actions"></div>
 </header>
@@ -489,6 +490,9 @@ permalink: /medico/prontuario/
 <!-- container para modais -->
 <div id="modal-host"></div>
 
+<!-- datalist global de medicamentos (princípio ativo + marcas) -->
+<datalist id="med-names"></datalist>
+
 <script>
 /* ===========================================================
    CONFIG
@@ -627,10 +631,40 @@ function alertErr(err) {
    AUTH
 =========================================================== */
 async function init() {
+  populateMedDatalist();
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = '/medico/'; return; }
   await onSignedIn(session.user);
   sb.auth.onAuthStateChange((e) => { if (e === 'SIGNED_OUT') window.location.href = '/medico/'; });
+}
+
+function populateMedDatalist() {
+  const dl = document.getElementById('med-names');
+  if (!dl || !window.MEDICATIONS) return;
+  const opts = [];
+  for (const m of window.MEDICATIONS) {
+    opts.push(`<option value="${escapeHtml(m.name)}"></option>`);
+    for (const a of (m.aliases || [])) {
+      opts.push(`<option value="${escapeHtml(a + ' (' + m.name + ')')}"></option>`);
+    }
+  }
+  dl.innerHTML = opts.join('');
+}
+
+function findMedication(rawValue) {
+  if (!rawValue || !window.MED_INDEX) return null;
+  let v = rawValue.trim();
+  // se vier como "Marca (Princípio)", pega o que está entre parênteses
+  const paren = v.match(/\(([^)]+)\)\s*$/);
+  if (paren) v = paren[1].trim();
+  const exact = window.MED_INDEX.get(v.toLowerCase());
+  if (exact) return exact;
+  // fuzzy: começa com
+  const lower = v.toLowerCase();
+  for (const [k, m] of window.MED_INDEX.entries()) {
+    if (k.startsWith(lower) && lower.length >= 3) return m;
+  }
+  return null;
 }
 
 async function onSignedIn(user) {
@@ -2078,27 +2112,34 @@ function openDocForm(type, doc) {
           patient_id: currentPatient.id,
           type,
           title: m.querySelector('#doc-title').value.trim() || defaultTitle,
-          issue_date: m.querySelector('#doc-issue-date').value,
+          issue_date: m.querySelector('#doc-issue-date').value || new Date().toISOString().slice(0,10),
           content: getContent(m)
         };
+        // 1) gera PDF AGORA (dentro do clique, preserva user-gesture)
+        if (isNew) {
+          try {
+            generateDocPDF(payload);
+          } catch (err) {
+            console.error('PDF gen falhou:', err);
+            alert('Erro ao gerar PDF: ' + err.message);
+            return;
+          }
+        }
+        // 2) depois persiste no Supabase
         try {
-          let saved;
           if (isNew) {
             const { data, error } = await sb.from('emr_documents').insert(payload).select().single();
             if (error) throw error;
             currentDocs.unshift(data);
-            saved = data;
           } else {
             const { data, error } = await sb.from('emr_documents').update(payload).eq('id', doc.id).select().single();
             if (error) throw error;
             const idx = currentDocs.findIndex(x => x.id === doc.id);
             if (idx >= 0) currentDocs[idx] = data;
-            saved = data;
           }
           closeModal();
           renderDocs();
           renderSummary();
-          if (isNew) generateDocPDF(saved);
         } catch (err) { alertErr(err); }
       };
     }
@@ -2106,22 +2147,26 @@ function openDocForm(type, doc) {
 }
 
 function medEditorHTML(m, i) {
+  // datalist próprio de apresentações deste editor
+  const presId = `med-pres-${Math.random().toString(36).slice(2, 9)}`;
   return `
     <div class="med-editor">
       <div class="form-row cols-2">
         <div class="form-group">
           <label>Medicamento</label>
-          <input data-f="name" value="${escapeHtml(m.name || '')}" placeholder="ex: Sumatriptano">
+          <input data-f="name" list="med-names" value="${escapeHtml(m.name || '')}" placeholder="Princípio ativo ou nome comercial">
+          <span class="form-hint" data-f="hint" style="min-height:14px;">Comece a digitar para ver sugestões</span>
         </div>
         <div class="form-group">
-          <label>Concentração / apresentação</label>
-          <input data-f="concentration" value="${escapeHtml(m.concentration || '')}" placeholder="ex: 50 mg comprimido">
+          <label>Apresentação / concentração</label>
+          <input data-f="concentration" list="${presId}" value="${escapeHtml(m.concentration || '')}" placeholder="ex: 50 mg comprimido revestido">
+          <datalist id="${presId}"></datalist>
         </div>
       </div>
       <div class="form-row cols-2">
         <div class="form-group">
           <label>Posologia</label>
-          <input data-f="posology" value="${escapeHtml(m.posology || '')}" placeholder="1 cp VO no início da crise, repetir após 2h se necessário">
+          <input data-f="posology" value="${escapeHtml(m.posology || '')}" placeholder="ex: 1 cp VO no início da crise, repetir após 2h se necessário">
         </div>
         <div class="form-group">
           <label>Quantidade</label>
@@ -2132,7 +2177,40 @@ function medEditorHTML(m, i) {
     </div>
   `;
 }
+
+function wireMedAutocomplete(editor) {
+  const nameInput = editor.querySelector('[data-f=name]');
+  const presInput = editor.querySelector('[data-f=concentration]');
+  const presDl = editor.querySelector('datalist');
+  const hint = editor.querySelector('[data-f=hint]');
+  if (!nameInput || !presInput || !presDl) return;
+
+  const update = () => {
+    const med = findMedication(nameInput.value);
+    if (med) {
+      presDl.innerHTML = med.presentations
+        .map(p => `<option value="${escapeHtml(p)}"></option>`).join('');
+      if (hint) hint.textContent = `${med.presentations.length} apresentaç${med.presentations.length === 1 ? 'ão' : 'ões'} disponíveis`;
+      // se o input vier como "Marca (Princípio)", normaliza para o princípio ativo após sair do foco
+    } else {
+      presDl.innerHTML = '';
+      if (hint) hint.textContent = 'Medicamento não encontrado na base — você pode digitar livremente';
+    }
+  };
+  nameInput.addEventListener('input', update);
+  nameInput.addEventListener('change', () => {
+    // normaliza "Marca (Princípio)" → "Princípio"
+    const v = nameInput.value;
+    const paren = v.match(/\(([^)]+)\)\s*$/);
+    if (paren) nameInput.value = paren[1].trim();
+    update();
+  });
+  // disparo inicial caso já tenha valor
+  if (nameInput.value) update();
+}
+
 function wireMedRemovers(m) {
+  m.querySelectorAll('.med-editor').forEach(ed => wireMedAutocomplete(ed));
   m.querySelectorAll('.med-rm').forEach(b => {
     b.onclick = () => {
       const list = m.querySelector('#meds-list');
@@ -2312,6 +2390,39 @@ function pdfFooter(doc) {
   }
 }
 
+/* Salva PDF de forma robusta:
+   - tenta doc.save() (download direto)
+   - se falhar OU se Safari/iOS, abre em nova aba (window.open com blob URL)
+   Necessário pra navegadores que bloqueiam download iniciado depois de
+   await (perde user-gesture). Sempre chamado dentro do clique do botão. */
+function pdfSave(doc, filename) {
+  try {
+    const blob = doc.output('blob');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      // mantém o URL um pouco mais antes de revogar (Safari)
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }, 100);
+    // fallback paralelo: abre em nova aba caso o download tenha sido bloqueado
+    // (alguns Safari ignoram <a download>; o open garante visualização)
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    if (isSafari) {
+      try { window.open(url, '_blank', 'noopener,noreferrer'); } catch (_) {}
+    }
+  } catch (err) {
+    console.error('pdfSave falhou:', err);
+    alert('Erro ao gerar PDF: ' + err.message);
+  }
+}
+
 function pdfWrappedText(doc, text, x, y, maxW, lineH = 5) {
   if (!text) return y;
   doc.setFontSize(10);
@@ -2365,7 +2476,7 @@ async function generateConsultPDF(c) {
 
   pdfFooter(doc);
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
-  doc.save(`atendimento-${safe}-${(c.consultation_date || '').slice(0,10)}.pdf`);
+  pdfSave(doc, `atendimento-${safe}-${(c.consultation_date || '').slice(0,10)}.pdf`);
 }
 
 /* ===========================================================
@@ -2420,7 +2531,7 @@ function pdfReceitaEspecial(d) {
   drawReceitaEspecialVia(doc, HALF, d, c);
 
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
-  doc.save(`receita-especial-${safe}-${d.issue_date}.pdf`);
+  pdfSave(doc, `receita-especial-${safe}-${d.issue_date}.pdf`);
 }
 
 function drawReceitaEspecialVia(doc, xOff, d, c) {
@@ -2669,7 +2780,7 @@ function pdfReceita(d, label, isSpecial) {
 
   pdfFooter(doc);
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
-  doc.save(`receita-${safe}-${d.issue_date}.pdf`);
+  pdfSave(doc, `receita-${safe}-${d.issue_date}.pdf`);
 }
 
 function pdfExames(d, label) {
@@ -2710,7 +2821,7 @@ function pdfExames(d, label) {
 
   pdfFooter(doc);
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
-  doc.save(`exames-${safe}-${d.issue_date}.pdf`);
+  pdfSave(doc, `exames-${safe}-${d.issue_date}.pdf`);
 }
 
 function pdfAtestado(d, label) {
@@ -2755,7 +2866,7 @@ function pdfAtestado(d, label) {
 
   pdfFooter(doc);
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
-  doc.save(`atestado-${safe}-${d.issue_date}.pdf`);
+  pdfSave(doc, `atestado-${safe}-${d.issue_date}.pdf`);
 }
 
 function pdfLaudo(d, label) {
@@ -2775,7 +2886,7 @@ function pdfLaudo(d, label) {
 
   pdfFooter(doc);
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
-  doc.save(`laudo-${safe}-${d.issue_date}.pdf`);
+  pdfSave(doc, `laudo-${safe}-${d.issue_date}.pdf`);
 }
 
 function pdfRelatorio(d, label) {
@@ -2795,7 +2906,7 @@ function pdfRelatorio(d, label) {
 
   pdfFooter(doc);
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
-  doc.save(`relatorio-${safe}-${d.issue_date}.pdf`);
+  pdfSave(doc, `relatorio-${safe}-${d.issue_date}.pdf`);
 }
 
 /* ===========================================================
@@ -2804,8 +2915,8 @@ function pdfRelatorio(d, label) {
    é enviada ao Supabase. Suporta Anthropic Claude e OpenAI.
 =========================================================== */
 const AI_DEFAULTS = {
-  anthropic: { model: 'claude-haiku-4-5-20251001' },
-  openai:    { model: 'gpt-4o-mini' }
+  anthropic: { model: 'claude-sonnet-4-6' },
+  openai:    { model: 'gpt-4o' }
 };
 
 function getAIConfig() {
@@ -2884,12 +2995,17 @@ function openAIConfig() {
 }
 
 const AI_FIELD_INSTRUCTIONS = {
-  hda:           'Reescreva esta História da Doença Atual de forma cronológica, em 1–3 parágrafos curtos. Use linguagem médica formal. Mantenha siglas usuais (HAS, DM, etc).',
-  physical_exam: 'Reescreva o exame físico geral organizado por sistemas (geral, AC, AR, abdome, extremidades). Use linguagem médica formal e siglas usuais.',
-  neuro_exam:    'Reescreva o exame neurológico em ordem topográfica padrão (consciência, linguagem, pares cranianos, motor, reflexos, sensibilidade, coordenação, marcha, sinais meníngeos). Use linguagem médica formal.',
-  hypothesis:    'Organize as hipóteses diagnósticas em uma lista enumerada, da mais provável à menos provável, com justificativa breve apenas se já estiver no texto.',
-  plan:          'Organize a conduta em itens claros (medicações com dose/posologia, exames solicitados, orientações, retorno). Não inclua dose/medicação que não esteja no texto.',
-  notes:         'Reescreva as observações em parágrafos claros e objetivos.'
+  hda: `Reescreva como HDA formal de prontuário neurológico, em 1–4 parágrafos cronológicos. Comece identificando o paciente (sexo, idade, comorbidades já mencionadas). Descreva instalação, evolução, características da queixa, fatores agravantes e atenuantes, sintomas associados, gatilhos, tratamentos prévios e respostas. Termine com negações relevantes ("Nega febre, déficit motor focal, perda de consciência, trauma craniano recente"). Use terminologia médica precisa. Não omita NENHUMA informação do texto original.`,
+
+  physical_exam: `Reescreva como exame físico geral em prontuário, organizado por sistemas, na ordem clássica: estado geral → aparelho cardiovascular (AC) → aparelho respiratório (AR) → abdome → extremidades. Use terminologia padrão (BNRNF 2T, MV+ bilateral sem RA, RHA+, edema +/4+, pulsos cheios e simétricos). Mantenha todos os achados anormais explícitos com lateralidade.`,
+
+  neuro_exam: `Reescreva como exame neurológico topográfico completo, na ordem clássica: nível de consciência (Glasgow se informado) → orientação → linguagem e funções cognitivas superiores → pares cranianos (I a XII em sequência) → sistema motor (tônus, trofismo, força graduada 0–V por segmento) → reflexos osteotendíneos (bicipital, tricipital, estiloradial, patelar, aquileu — graduados 0–4+) e cutâneo-plantar → sensibilidade (tátil, dolorosa, vibratória, proprioceptiva) → coordenação (índex-nariz, calcanhar-joelho, diadococinesia) → marcha → equilíbrio (Romberg) → sinais meníngeos. Preserve lateralidade (D/E) e graduações exatas. Não omita segmentos descritos no original.`,
+
+  hypothesis: `Organize as hipóteses diagnósticas em lista enumerada (1., 2., 3.), da mais provável à menos provável. Para cada uma, inclua o CID-10 entre parênteses se mencionado. Adicione justificativa apenas se já presente no texto original.`,
+
+  plan: `Organize a conduta em itens claros, na seguinte ordem quando aplicável: (1) Medicações — nome, apresentação, dose, via, posologia e duração; (2) Exames complementares solicitados; (3) Orientações ao paciente (medidas comportamentais, sinais de alarme); (4) Encaminhamentos / interconsultas; (5) Retorno em [tempo]. NÃO inclua nenhuma medicação, dose, exame ou orientação que não esteja explícita no texto original.`,
+
+  notes: `Reescreva as observações em prontuário formal, em parágrafos claros. Preserve TODA a informação original — não simplifique nem reduza.`
 };
 
 async function organizeWithAI(currentText, fieldName, onApply) {
@@ -2942,19 +3058,35 @@ async function organizeWithAI(currentText, fieldName, onApply) {
   });
 }
 
-const AI_SYSTEM_PROMPT = [
-  'Você é assistente de um médico neurologista brasileiro e ajuda a revisar texto clínico de prontuário.',
-  'Recebe um trecho digitado de forma rápida (anotações, abreviações, frases incompletas) e devolve a MESMA informação reescrita em linguagem médica formal pt-BR.',
-  '',
-  'REGRAS RÍGIDAS — siga sempre:',
-  '1) NÃO invente sintomas, sinais, achados, diagnósticos ou medicações.',
-  '2) NÃO acrescente informação que não esteja explícita no texto.',
-  '3) NÃO altere o sentido clínico nem inverta laterais ou cronologia.',
-  '4) Mantenha siglas médicas usuais (HAS, DM, HDA, RNM, EEG, AVC, etc).',
-  '5) Não use markdown, headers ou bullets ★/✓; use texto corrido ou listas com hífen apenas se o texto original já tiver listas.',
-  '6) Se o texto estiver muito curto/vago, devolva-o praticamente como está (apenas correção ortográfica e pontuação).',
-  '7) Devolva APENAS o texto reescrito — sem comentários, sem "aqui está", sem aspas externas.'
-].join('\n');
+const AI_SYSTEM_PROMPT = `Você é um médico-assistente experiente em redação de prontuário neurológico em português do Brasil. Sua função é receber anotações ABREVIADAS, RÁPIDAS, INCOMPLETAS ditadas pelo neurologista durante a consulta e devolver O MESMO CONTEÚDO CLÍNICO reescrito de forma TÉCNICA, COMPLETA E ORGANIZADA, como apareceria num prontuário formal de hospital universitário.
+
+EXEMPLO DO PADRÃO ESPERADO
+
+Entrada (HDA, anotações rápidas):
+"pcte fem 52a, cefaleia há 6m, holocraniana, latejante, 7-8/10, 2-3x/sem, ja tentou amitripti sem resp, foto fonofobia, naúsea, sem aura, piora c/ stress, sem rdcat"
+
+Saída (HDA formal):
+"Paciente do sexo feminino, 52 anos, refere quadro de cefaleia com início há 6 meses, de característica holocraniana, pulsátil, intensidade 7–8/10 pela escala visual analógica, com frequência de 2 a 3 episódios semanais. Associada a fotofobia, fonofobia e náusea, sem aura visual ou sensitiva. Identifica estresse como gatilho. Tentou uso prévio de amitriptilina, sem resposta clínica satisfatória. Nega irradiação cervical."
+
+REGRAS DE OURO
+
+1) NÃO INVENTE — nunca acrescente sintoma, sinal, exame, diagnóstico, medicação, dose, posologia ou achado que NÃO esteja no texto original.
+2) NÃO REDUZA o conteúdo. Você deve EXPANDIR e ESTRUTURAR, não simplificar. Se o original tem 5 informações, a saída deve ter as MESMAS 5 informações — porém em linguagem médica completa.
+3) EXPANDA abreviações para a forma técnica correta:
+   - "pcte"→"paciente", "fem"→"do sexo feminino", "masc"→"do sexo masculino"
+   - "rdcat"→"irradiação cervical", "lat D/E"→"à direita/esquerda"
+   - "MS/MI"→"membro superior/inferior", "MMSS/MMII"→"membros superiores/inferiores"
+   - "ROT"→"reflexos osteotendíneos", "RCP"→"reflexo cutâneo-plantar"
+   - "↓/↑"→"diminuído/aumentado"
+   - "FX"→"força" (em escala 0–V de Medical Research Council)
+   - "sg AC"→"sem alterações"
+   Mantenha siglas QUE JÁ SÃO PADRÃO em prontuário: HAS, DM2, HDA, AC, AR, RNM, TC, EEG, AVC, AIT, BNRNF, MV+, RHA+.
+4) ORGANIZAÇÃO conforme o tipo de campo (você receberá instrução específica). Use ordem cronológica para HDA, topográfica para exame neurológico, sistêmica para exame físico.
+5) PRESERVE INTEGRALMENTE: lateralidade (D/E), números, datas, doses, escalas, cronologia, NEGAÇÕES. "Nega X" é informação clínica relevante e deve aparecer na saída.
+6) FORMALIDADE em pt-BR. Sem coloquialismos. Sem "o paciente disse que…"; use "refere", "nega", "apresenta", "queixa-se de".
+7) Se o texto original estiver muito curto/vago (menos de uma frase), devolva-o praticamente como está, apenas com correção ortográfica e pontuação — não fabrique conteúdo.
+8) NÃO use markdown (sem **, ##, listas com -). Use texto corrido em parágrafos. Listas só quando o tipo de campo pedir explicitamente (ex.: hipóteses diagnósticas enumeradas).
+9) Devolva APENAS o texto reescrito. Sem aspas envolventes, sem cabeçalhos, sem "Aqui está...", sem comentários metalinguísticos.`;
 
 async function callAI(cfg, fieldInstruction, text) {
   const userPrompt = `${fieldInstruction}\n\n--- TEXTO ORIGINAL ---\n${text}\n--- FIM ---`;
@@ -2970,7 +3102,7 @@ async function callAI(cfg, fieldInstruction, text) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1500,
+        max_tokens: 4000,
         system: AI_SYSTEM_PROMPT,
         messages: [{ role: 'user', content: userPrompt }]
       })
@@ -2988,7 +3120,7 @@ async function callAI(cfg, fieldInstruction, text) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1500,
+        max_tokens: 4000,
         messages: [
           { role: 'system', content: AI_SYSTEM_PROMPT },
           { role: 'user',   content: userPrompt }
