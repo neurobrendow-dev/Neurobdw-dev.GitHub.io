@@ -450,14 +450,19 @@ permalink: /medico/prontuario/
     <!-- TAB DOCUMENTOS -->
     <div class="tab-panel" data-tab="documentos">
       <div class="doc-creator-grid">
+        <button class="doc-creator-btn" data-doctype="memed" id="btn-memed-receita" hidden style="border-left:3px solid #2d6a4f;">
+          <span class="ic">✅</span>
+          <span class="lbl">Receita Memed (assinada)</span>
+          <div class="desc">Receita digital com assinatura ICP-Brasil via Memed</div>
+        </button>
         <button class="doc-creator-btn" data-doctype="receita_simples">
           <span class="ic">℞</span>
-          <span class="lbl">Receita simples</span>
-          <div class="desc">Medicações comuns</div>
+          <span class="lbl">Receita simples (PDF local)</span>
+          <div class="desc">Medicações comuns — sem assinatura digital</div>
         </button>
         <button class="doc-creator-btn" data-doctype="receita_especial">
           <span class="ic">℞⚠</span>
-          <span class="lbl">Receita especial</span>
+          <span class="lbl">Receita especial (PDF local)</span>
           <div class="desc">Controlados — Port. 344/98</div>
         </button>
         <button class="doc-creator-btn" data-doctype="exames">
@@ -688,14 +693,17 @@ async function onSignedIn(user) {
   $('topbar-actions').innerHTML = `
     <a class="btn-link" href="/medico/">← MENU PRINCIPAL</a>
     <button class="btn-link" id="btn-ai-config" title="Configurar IA">⚙ IA</button>
+    <button class="btn-link" id="btn-memed-config" title="Configurar Memed">⚙ Memed</button>
     <span class="topbar-user">Dr(a). ${escapeHtml(profile.full_name.split(' ')[0])}</span>
     <button class="btn-link" id="btn-logout">Sair</button>
   `;
   $('btn-ai-config').onclick = openAIConfig;
+  $('btn-memed-config').onclick = openMemedConfig;
   $('btn-logout').onclick = async () => { await sb.auth.signOut(); };
 
   hide('view-loading');
   show('view-patients');
+  refreshMemedButton();
   await Promise.all([loadPatients(), loadCustomExamGroups()]);
 }
 
@@ -1808,8 +1816,23 @@ function renderDocs() {
 }
 
 document.querySelectorAll('.doc-creator-btn').forEach(b => {
-  b.onclick = () => openDocForm(b.dataset.doctype, null);
+  b.onclick = () => {
+    const t = b.dataset.doctype;
+    if (t === 'memed') {
+      if (!currentPatient) { alert('Abra um paciente primeiro.'); return; }
+      openMemedReceita(currentPatient);
+    } else {
+      openDocForm(t, null);
+    }
+  };
 });
+
+/* mostra/oculta o botão "Receita Memed" conforme token configurado */
+function refreshMemedButton() {
+  const btn = document.getElementById('btn-memed-receita');
+  if (!btn) return;
+  btn.hidden = !getMemedConfig().token;
+}
 
 /* ===========================================================
    DOCUMENTOS — formulários por tipo
@@ -1983,9 +2006,16 @@ function openDocForm(type, doc) {
     defaultTitle = 'Laudo neurológico';
     bodyHTML = `
       <div class="form-row">
+        <div class="btn-row">
+          <button type="button" class="btn-secondary" id="laudo-ai">
+            ✨ Gerar laudo com IA a partir das consultas
+          </button>
+        </div>
+      </div>
+      <div class="form-row">
         <div class="form-group">
           <label>Conteúdo do laudo</label>
-          <textarea id="lo-body" style="min-height:340px;" placeholder="Digite o laudo livremente.">${escapeHtml(c.body || '')}</textarea>
+          <textarea id="lo-body" style="min-height:340px;" placeholder="Digite o laudo livremente, ou use o botão acima para gerar a partir das consultas registradas.">${escapeHtml(c.body || '')}</textarea>
         </div>
       </div>
     `;
@@ -2116,6 +2146,14 @@ function openDocForm(type, doc) {
           const row = m.querySelector('#at-companion-row');
           if (row) row.hidden = subtypeSel.value !== 'acompanhante';
         };
+      }
+
+      // Botão "Gerar laudo com IA" — só presente no form de laudo
+      const laudoAiBtn = m.querySelector('#laudo-ai');
+      if (laudoAiBtn) {
+        laudoAiBtn.onclick = () => openLaudoAI(currentPatient, currentConsults, currentHistory, (txt) => {
+          m.querySelector('#lo-body').value = txt;
+        });
       }
 
       m.querySelector('#btn-save-doc').onclick = async (ev) => {
@@ -3265,6 +3303,435 @@ async function callAI(cfg, fieldInstruction, text) {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
     return (data.choices?.[0]?.message?.content || '').trim();
+  }
+}
+
+/* ===========================================================
+   LAUDO COM IA — gera laudo a partir das consultas
+=========================================================== */
+const LAUDO_TIPOS = {
+  generico:    'laudo neurológico clínico genérico',
+  inss:        'laudo para fins previdenciários (INSS) — aposentadoria por invalidez ou auxílio-doença',
+  trabalhista: 'laudo trabalhista (CAT/NTEP) — afastamento ou nexo causal com atividade laboral',
+  judicial:    'laudo judicial/pericial — para juntada em processo judicial',
+  curatela:    'laudo de capacidade civil — fins de curatela ou interdição',
+  cnh:         'laudo para CNH — avaliação de aptidão para conduzir veículos',
+  seguro:      'laudo para seguro/plano de saúde — análise de cobertura',
+  escolar:     'laudo escolar — inclusão / adaptação curricular / transtornos do aprendizado',
+  retorno:     'laudo de retorno ao trabalho — declaração de aptidão',
+  encam:       'laudo de encaminhamento a especialista'
+};
+
+function openLaudoAI(patient, consults, history, onApply) {
+  const cfg = getAIConfig();
+  if (!cfg.apiKey) {
+    if (confirm('A chave da IA não está configurada. Abrir configurações agora?')) openAIConfig();
+    return;
+  }
+  const sorted = [...(consults || [])].sort(
+    (a, b) => new Date(b.consultation_date) - new Date(a.consultation_date)
+  );
+
+  openModal({
+    title: 'Gerar laudo com IA',
+    size: 'lg',
+    bodyHTML: `
+      <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:14px;">
+        A IA usa as consultas selecionadas + histórico médico para gerar um laudo neurológico
+        estruturado. Você pode revisar e editar antes de aplicar.
+      </p>
+
+      <h4 class="section-title" style="margin-top:0;">Consultas a incluir</h4>
+      <div style="max-height:28vh;overflow-y:auto;border:1px solid #d8e4f0;padding:10px;margin-bottom:14px;">
+        ${sorted.length ? sorted.map((c, i) => `
+          <label style="display:flex;align-items:flex-start;gap:8px;padding:6px 0;cursor:pointer;border-bottom:1px solid #eaeff5;">
+            <input type="checkbox" data-consult-id="${c.id}" ${i === 0 ? 'checked' : ''} style="margin-top:3px;width:auto;">
+            <div style="flex:1;">
+              <div style="font-weight:500;font-size:0.9rem;">${fmtDateTime(c.consultation_date)}</div>
+              <div style="font-size:0.78rem;color:#5a6f85;line-height:1.4;">
+                ${c.chief_complaint ? '<strong>QP:</strong> ' + escapeHtml(c.chief_complaint).slice(0,90) + (c.chief_complaint.length > 90 ? '…' : '') : ''}
+                ${c.hypothesis ? '<br><strong>HD:</strong> ' + escapeHtml(c.hypothesis).slice(0,90) : ''}
+                ${(c.cid_codes || []).length ? '<br><strong>CID:</strong> ' + escapeHtml(c.cid_codes.join(', ')) : ''}
+              </div>
+            </div>
+          </label>
+        `).join('') : '<div class="empty-state">Sem consultas registradas para este paciente.</div>'}
+      </div>
+
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label>Finalidade do laudo</label>
+          <select id="laudo-type">
+            ${Object.entries(LAUDO_TIPOS).map(([k, v]) =>
+              `<option value="${k}">${escapeHtml(v.charAt(0).toUpperCase() + v.slice(1, 60))}</option>`
+            ).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Tom / extensão</label>
+          <select id="laudo-tone">
+            <option value="objetivo">Objetivo (1–2 páginas)</option>
+            <option value="detalhado" selected>Detalhado (2–3 páginas)</option>
+            <option value="extenso">Extenso (3+ páginas)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Instruções específicas / comandos para a IA (opcional)</label>
+          <textarea id="laudo-instr" style="min-height:90px;" placeholder="ex: 'Enfatizar incapacidade laboral por enxaqueca crônica refratária', 'Incluir solicitação de afastamento de 6 meses', 'Mencionar tentativas terapêuticas falhadas com triptano e topiramato', 'Foco em sintomas cognitivos para CAT'..."></textarea>
+        </div>
+      </div>
+
+      <div class="form-row" style="display:none;" id="laudo-result-row">
+        <div class="form-group">
+          <label>Laudo gerado <span id="laudo-status" style="color:var(--gray);font-size:0.72rem;font-weight:400;text-transform:none;letter-spacing:0;"></span></label>
+          <textarea id="laudo-result" style="min-height:300px;font-family:Georgia,serif;"></textarea>
+        </div>
+      </div>
+    `,
+    footHTML: `
+      <div style="flex:1"></div>
+      <button class="btn-secondary" data-close>Cancelar</button>
+      <button class="btn-primary" id="laudo-gen">Gerar laudo</button>
+      <button class="btn-primary" id="laudo-apply" style="display:none;">Aplicar ao formulário</button>
+    `,
+    onMount: (m) => {
+      m.querySelector('#laudo-gen').onclick = async () => {
+        const selected = [...m.querySelectorAll('input[data-consult-id]:checked')]
+          .map(c => sorted.find(x => x.id === c.dataset.consultId)).filter(Boolean);
+        if (!selected.length && sorted.length) {
+          alert('Selecione ao menos uma consulta.'); return;
+        }
+        const tipo = m.querySelector('#laudo-type').value;
+        const tone = m.querySelector('#laudo-tone').value;
+        const instr = m.querySelector('#laudo-instr').value.trim();
+
+        m.querySelector('#laudo-result-row').style.display = '';
+        m.querySelector('#laudo-status').textContent = 'gerando…';
+        m.querySelector('#laudo-result').value = '';
+        const btnGen = m.querySelector('#laudo-gen');
+        btnGen.disabled = true;
+        btnGen.textContent = 'Gerando…';
+
+        try {
+          const text = await callAILaudo(cfg, patient, history, selected, tipo, tone, instr);
+          m.querySelector('#laudo-result').value = text;
+          m.querySelector('#laudo-status').textContent =
+            `via ${cfg.provider} · ${cfg.model || AI_DEFAULTS[cfg.provider].model}`;
+          btnGen.textContent = 'Gerar de novo';
+          btnGen.disabled = false;
+          m.querySelector('#laudo-apply').style.display = '';
+        } catch (err) {
+          console.error('[laudo IA] erro:', err);
+          m.querySelector('#laudo-status').textContent = 'erro: ' + (err?.message || err).slice(0, 200);
+          btnGen.disabled = false;
+          btnGen.textContent = 'Gerar laudo';
+        }
+      };
+
+      m.querySelector('#laudo-apply').onclick = () => {
+        const txt = m.querySelector('#laudo-result').value;
+        onApply(txt);
+        closeModal();
+      };
+    }
+  });
+}
+
+async function callAILaudo(cfg, patient, history, consults, tipo, tone, instrucoes) {
+  const SEX_LABEL = { F: 'Feminino', M: 'Masculino', O: 'Outro' };
+  const patientInfo = [
+    `Nome: ${patient.full_name}`,
+    patient.birth_date ? `Idade: ${age(patient.birth_date)} anos (nascido em ${fmtDate(patient.birth_date)})` : null,
+    patient.sex ? `Sexo: ${SEX_LABEL[patient.sex]}` : null,
+    patient.cpf ? `CPF: ${patient.cpf}` : null,
+    patient.rg  ? `RG: ${patient.rg}` : null,
+    patient.occupation     ? `Profissão: ${patient.occupation}` : null,
+    patient.marital_status ? `Estado civil: ${patient.marital_status}` : null,
+    patient.address ? `Endereço: ${patient.address}` : null,
+  ].filter(Boolean).join(' · ');
+
+  const histInfo = history ? [
+    history.comorbidities    ? `Comorbidades: ${history.comorbidities}` : null,
+    history.allergies        ? `Alergias: ${history.allergies}` : null,
+    history.current_meds     ? `Medicações em uso: ${history.current_meds}` : null,
+    history.past_history     ? `Antecedentes pessoais: ${history.past_history}` : null,
+    history.surgical_history ? `Antecedentes cirúrgicos: ${history.surgical_history}` : null,
+    history.family_history   ? `Antecedentes familiares: ${history.family_history}` : null,
+    history.habits           ? `Hábitos: ${history.habits}` : null,
+    history.gyn_obs          ? `Ginecológico/obstétrico: ${history.gyn_obs}` : null,
+    history.notes            ? `Observações do histórico: ${history.notes}` : null,
+  ].filter(Boolean).join('\n') : '';
+
+  const consultsInfo = (consults || []).map((c, i) => {
+    const lines = [`=== CONSULTA ${i + 1} — ${fmtDateTime(c.consultation_date)} (${c.type || 'consulta'}) ===`];
+    if (c.chief_complaint)        lines.push(`Queixa principal: ${c.chief_complaint}`);
+    if (c.hda)                    lines.push(`HDA: ${c.hda}`);
+    if (c.physical_exam)          lines.push(`Exame físico: ${c.physical_exam}`);
+    if (c.neuro_exam)             lines.push(`Exame neurológico: ${c.neuro_exam}`);
+    if (c.hypothesis)             lines.push(`Hipótese diagnóstica: ${c.hypothesis}`);
+    if ((c.cid_codes || []).length) lines.push(`CID-10: ${c.cid_codes.join(', ')}`);
+    if (c.plan)                   lines.push(`Conduta: ${c.plan}`);
+    if (c.return_in)              lines.push(`Retorno: ${c.return_in}`);
+    if (c.notes)                  lines.push(`Observações: ${c.notes}`);
+    return lines.join('\n');
+  }).join('\n\n');
+
+  const TONE_DESC = {
+    objetivo:  'Texto enxuto, em 1–2 páginas, frases diretas, sem redundância.',
+    detalhado: 'Texto detalhado, em 2–3 páginas, com descrição completa de evolução, exame e raciocínio diagnóstico.',
+    extenso:   'Texto extenso, em 3 ou mais páginas, com descrição minuciosa de cada item, contextualização clínica ampla e justificativa diagnóstica robusta.'
+  };
+
+  const userPrompt = `Gere um ${LAUDO_TIPOS[tipo]} a partir dos dados clínicos abaixo.
+
+DADOS DO PACIENTE
+-----------------
+${patientInfo}
+
+HISTÓRICO MÉDICO
+----------------
+${histInfo || '(sem histórico registrado)'}
+
+CONSULTAS REGISTRADAS
+---------------------
+${consultsInfo || '(sem consultas registradas)'}
+
+${instrucoes ? `INSTRUÇÕES ESPECÍFICAS DO MÉDICO
+--------------------------------
+${instrucoes}` : ''}
+
+ESTRUTURA OBRIGATÓRIA DO LAUDO (siga em ordem, em parágrafos contínuos):
+
+1. IDENTIFICAÇÃO DO PACIENTE — nome, idade/data de nascimento, sexo, CPF, profissão (quando disponível), estado civil, endereço.
+2. HISTÓRIA CLÍNICA / HDA — síntese cronológica baseada nas queixas e HDAs das consultas. Mencione início, evolução, características e fatores associados.
+3. ANTECEDENTES — pessoais, familiares, hábitos (use os do histórico médico).
+4. EXAME CLÍNICO — síntese do exame físico geral.
+5. EXAME NEUROLÓGICO — síntese topográfica do(s) exame(s) neurológico(s) realizados.
+6. EXAMES COMPLEMENTARES — apenas se mencionados.
+7. EVOLUÇÃO E CONDUTAS — síntese cronológica das condutas e respostas terapêuticas.
+8. DIAGNÓSTICO(S) — listar com CID-10.
+9. CONCLUSÃO — específica para a finalidade do laudo (${LAUDO_TIPOS[tipo]}). Seja explícito sobre o que está sendo atestado.
+
+TOM E EXTENSÃO: ${TONE_DESC[tone] || TONE_DESC.detalhado}
+
+REGRAS RÍGIDAS:
+- NÃO INVENTE achados, sintomas, diagnósticos ou exames que não estejam nos dados fornecidos.
+- USE LINGUAGEM TÉCNICA FORMAL pt-BR de prontuário hospitalar.
+- A conclusão deve ser ESPECÍFICA para a finalidade indicada (${LAUDO_TIPOS[tipo]}).
+- NÃO use markdown, headers (#, ##), bullets (-, *) ou negrito (**). Use texto corrido em parágrafos.
+- Comece o laudo direto pelo título e identificação. NÃO inclua "Aqui está o laudo" ou similar.
+- Devolva APENAS o texto do laudo.`;
+
+  if (cfg.provider === 'anthropic') {
+    const model = cfg.model || AI_DEFAULTS.anthropic.model;
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': cfg.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4000,
+        system: AI_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userPrompt }]
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
+    return (data.content || []).map(b => b.text || '').join('').trim();
+  } else {
+    const model = cfg.model || AI_DEFAULTS.openai.model;
+    const resp = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${cfg.apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4000,
+        messages: [
+          { role: 'system', content: AI_SYSTEM_PROMPT },
+          { role: 'user',   content: userPrompt }
+        ]
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error?.message || `HTTP ${resp.status}`);
+    return (data.choices?.[0]?.message?.content || '').trim();
+  }
+}
+
+/* ===========================================================
+   MEMED — integração via SDK (widget de prescrição)
+   Token: cada médico tem o seu, obtido em sua conta Memed.
+   Doc: https://memed.com.br/desenvolvedores
+=========================================================== */
+const MEMED_SDK_URL = 'https://memed.com.br/modulos/plataforma.sinapse-prescricao/build/sinapse-prescricao.min.js';
+
+function getMemedConfig() {
+  return {
+    token: localStorage.getItem('memed_token') || '',
+    color: localStorage.getItem('memed_color') || '#0d1b2a',
+    cid:   localStorage.getItem('memed_cid')   || '' // user ID Memed (opcional)
+  };
+}
+function setMemedConfig({ token, color, cid }) {
+  localStorage.setItem('memed_token', token || '');
+  localStorage.setItem('memed_color', color || '#0d1b2a');
+  localStorage.setItem('memed_cid',   cid || '');
+}
+
+function openMemedConfig() {
+  const cfg = getMemedConfig();
+  openModal({
+    title: 'Configuração Memed',
+    size: 'md',
+    bodyHTML: `
+      <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:14px;">
+        Cole o <strong>token de integração Memed</strong> que você obtém na sua conta
+        (<a href="https://memed.com.br" target="_blank" rel="noopener">memed.com.br</a> →
+        Integrações → API). Ele fica salvo apenas neste navegador.
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Token Memed</label>
+          <input id="memed-token" type="password" autocomplete="off" value="${escapeHtml(cfg.token)}" placeholder="ey... (JWT longo)">
+        </div>
+      </div>
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label>Cor primária do widget (opcional)</label>
+          <input id="memed-color" value="${escapeHtml(cfg.color)}" placeholder="#0d1b2a">
+        </div>
+        <div class="form-group">
+          <label>ID Memed do médico (opcional)</label>
+          <input id="memed-cid" value="${escapeHtml(cfg.cid)}" placeholder="se necessário">
+        </div>
+      </div>
+      <div class="msg info" style="font-size:0.82rem;">
+        Sem token configurado, o botão "Receita Memed" não aparece — o sistema continua usando o
+        receituário em PDF local.
+      </div>
+    `,
+    footHTML: `
+      <button class="btn-danger" id="memed-clear">Limpar</button>
+      <div style="flex:1"></div>
+      <button class="btn-secondary" data-close>Cancelar</button>
+      <button class="btn-primary" id="memed-save">Salvar</button>
+    `,
+    onMount: (m) => {
+      m.querySelector('#memed-save').onclick = () => {
+        setMemedConfig({
+          token: m.querySelector('#memed-token').value.trim(),
+          color: m.querySelector('#memed-color').value.trim() || '#0d1b2a',
+          cid:   m.querySelector('#memed-cid').value.trim()
+        });
+        closeModal();
+        refreshMemedButton();
+      };
+      m.querySelector('#memed-clear').onclick = () => {
+        if (!confirm('Remover configurações Memed deste navegador?')) return;
+        localStorage.removeItem('memed_token');
+        localStorage.removeItem('memed_color');
+        localStorage.removeItem('memed_cid');
+        closeModal();
+        refreshMemedButton();
+      };
+    }
+  });
+}
+
+let memedSDKPromise = null;
+function loadMemedSDK() {
+  if (memedSDKPromise) return memedSDKPromise;
+  const cfg = getMemedConfig();
+  if (!cfg.token) return Promise.reject(new Error('Token Memed não configurado.'));
+  memedSDKPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = MEMED_SDK_URL;
+    s.dataset.token = cfg.token;
+    s.dataset.color = cfg.color;
+    s.dataset.container = 'memed-container';
+    s.onload = () => {
+      // espera o evento de inicialização do módulo
+      const checkReady = () => {
+        if (window.MdSinapsePrescricao && window.MdHub) resolve();
+        else setTimeout(checkReady, 100);
+      };
+      checkReady();
+    };
+    s.onerror = () => reject(new Error('Falha ao carregar SDK Memed.'));
+    document.head.appendChild(s);
+  });
+  return memedSDKPromise;
+}
+
+async function openMemedReceita(patient) {
+  try {
+    await loadMemedSDK();
+  } catch (err) {
+    alert('Memed: ' + err.message);
+    return;
+  }
+  // garante que existe um container para o widget
+  let container = document.getElementById('memed-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'memed-container';
+    document.body.appendChild(container);
+  }
+
+  // configura paciente
+  const memedPaciente = {
+    idExterno: patient.id,
+    nome: patient.full_name,
+    cpf: (patient.cpf || '').replace(/\D/g, ''),
+    data_nascimento: patient.birth_date || '',
+    endereco: patient.address || '',
+    cidade: 'Fortaleza',
+    telefone: (patient.phone || '').replace(/\D/g, ''),
+    email: patient.email || '',
+    nome_social: patient.full_name
+  };
+
+  try {
+    window.MdHub.command.send('plataforma.prescricao', 'setPaciente', memedPaciente);
+    window.MdHub.module.show('plataforma.prescricao');
+  } catch (err) {
+    console.error('[memed] erro ao abrir prescrição:', err);
+    alert('Erro ao abrir Memed: ' + err.message);
+    return;
+  }
+
+  // listener para quando a receita for finalizada (registra no Supabase)
+  if (!window.__memedListenerInstalled) {
+    window.__memedListenerInstalled = true;
+    window.MdSinapsePrescricao.event.add('prescricaoImpressa', async function(prescricaoData) {
+      console.log('[memed] prescrição impressa:', prescricaoData);
+      try {
+        await sb.from('emr_documents').insert({
+          patient_id: currentPatient?.id || patient.id,
+          type: 'receita_simples',
+          title: 'Receita Memed',
+          issue_date: new Date().toISOString().slice(0, 10),
+          content: { memed: prescricaoData, source: 'memed' }
+        });
+        if (currentPatient) {
+          const { data } = await sb.from('emr_documents').select('*')
+            .eq('patient_id', currentPatient.id)
+            .order('issue_date', { ascending: false });
+          currentDocs = data || [];
+          renderDocs();
+          renderSummary();
+        }
+      } catch (err) {
+        console.error('[memed] erro ao salvar referência:', err);
+      }
+    });
   }
 }
 
