@@ -1827,11 +1827,12 @@ document.querySelectorAll('.doc-creator-btn').forEach(b => {
   };
 });
 
-/* mostra/oculta o botão "Receita Memed" conforme token configurado */
+/* mostra/oculta o botão "Receita Memed" conforme api_key configurada */
 function refreshMemedButton() {
   const btn = document.getElementById('btn-memed-receita');
   if (!btn) return;
-  btn.hidden = !getMemedConfig().token;
+  const cfg = getMemedConfig();
+  btn.hidden = !(cfg.apiKey && cfg.cidExterno);
 }
 
 /* ===========================================================
@@ -3572,72 +3573,141 @@ REGRAS RÍGIDAS:
 =========================================================== */
 const MEMED_SDK_URL = 'https://memed.com.br/modulos/plataforma.sinapse-prescricao/build/sinapse-prescricao.min.js';
 
+/* Configuração Memed (credenciais de integrador) */
 function getMemedConfig() {
   return {
-    token: localStorage.getItem('memed_token') || '',
-    color: localStorage.getItem('memed_color') || '#0d1b2a',
-    cid:   localStorage.getItem('memed_cid')   || '' // user ID Memed (opcional)
+    apiKey:    localStorage.getItem('memed_api_key')    || '',
+    secret:    localStorage.getItem('memed_secret')     || '',
+    apiUrl:    localStorage.getItem('memed_api_url')    || 'https://api.memed.com.br',
+    sandbox:   localStorage.getItem('memed_sandbox')    === '1',
+    token:     localStorage.getItem('memed_token')      || '',  // JWT de sessão (cache)
+    tokenExp:  +(localStorage.getItem('memed_token_exp') || 0),
+    cidExterno:localStorage.getItem('memed_cid_externo')|| '',  // external_id (vinculo ao médico)
+    color:     localStorage.getItem('memed_color')      || '#0d1b2a',
   };
 }
-function setMemedConfig({ token, color, cid }) {
-  localStorage.setItem('memed_token', token || '');
-  localStorage.setItem('memed_color', color || '#0d1b2a');
-  localStorage.setItem('memed_cid',   cid || '');
+function setMemedConfig(p) {
+  const map = {
+    apiKey: 'memed_api_key', secret: 'memed_secret', apiUrl: 'memed_api_url',
+    color:  'memed_color', cidExterno: 'memed_cid_externo'
+  };
+  for (const [k, key] of Object.entries(map)) {
+    if (k in p) localStorage.setItem(key, p[k] || '');
+  }
+  if ('sandbox' in p) localStorage.setItem('memed_sandbox', p.sandbox ? '1' : '0');
+  if ('token'   in p) localStorage.setItem('memed_token', p.token || '');
+  if ('tokenExp' in p) localStorage.setItem('memed_token_exp', String(p.tokenExp || 0));
 }
 
 function openMemedConfig() {
   const cfg = getMemedConfig();
   openModal({
     title: 'Configuração Memed',
-    size: 'md',
+    size: 'lg',
     bodyHTML: `
       <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:14px;">
-        Cole o <strong>token de integração Memed</strong> que você obtém na sua conta
-        (<a href="https://memed.com.br" target="_blank" rel="noopener">memed.com.br</a> →
-        Integrações → API). Ele fica salvo apenas neste navegador.
+        Cole as credenciais de integração que a Memed te forneceu. O sistema troca automaticamente
+        por um <strong>token JWT de sessão</strong> antes de cada uso. Tudo fica apenas neste navegador.
       </p>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Token Memed</label>
-          <input id="memed-token" type="password" autocomplete="off" value="${escapeHtml(cfg.token)}" placeholder="ey... (JWT longo)">
-        </div>
-      </div>
+
       <div class="form-row cols-2">
         <div class="form-group">
-          <label>Cor primária do widget (opcional)</label>
-          <input id="memed-color" value="${escapeHtml(cfg.color)}" placeholder="#0d1b2a">
+          <label>API Key</label>
+          <input id="memed-apikey" type="password" autocomplete="off" value="${escapeHtml(cfg.apiKey)}" placeholder="sua api key Memed">
         </div>
         <div class="form-group">
-          <label>ID Memed do médico (opcional)</label>
-          <input id="memed-cid" value="${escapeHtml(cfg.cid)}" placeholder="se necessário">
+          <label>Secret</label>
+          <input id="memed-secret" type="password" autocomplete="off" value="${escapeHtml(cfg.secret)}" placeholder="seu secret">
         </div>
       </div>
+
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label>URL da API</label>
+          <input id="memed-apiurl" value="${escapeHtml(cfg.apiUrl)}" placeholder="https://api.memed.com.br">
+          <span class="form-hint">use https://sandbox.api.memed.com.br para testes</span>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="memed-sandbox" ${cfg.sandbox ? 'checked' : ''} style="width:auto;">
+            Ambiente de teste (sandbox)
+          </label>
+        </div>
+      </div>
+
+      <h4 class="section-title" style="margin-top:14px;">Identificação do médico</h4>
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label>External ID (seu identificador único na Memed)</label>
+          <input id="memed-cid-externo" value="${escapeHtml(cfg.cidExterno || DOCTOR_CRM_NUMBER)}" placeholder="ex: ${DOCTOR_CRM_NUMBER}">
+          <span class="form-hint">geralmente o CRM ou ID estável que vincula o médico na Memed</span>
+        </div>
+        <div class="form-group">
+          <label>Cor do widget</label>
+          <input id="memed-color" value="${escapeHtml(cfg.color)}" placeholder="#0d1b2a">
+        </div>
+      </div>
+
+      ${cfg.token ? `
+      <div class="msg success" style="font-size:0.82rem;">
+        <strong>Token JWT em cache</strong> — válido até ${cfg.tokenExp ? new Date(cfg.tokenExp).toLocaleString('pt-BR') : 'desconhecido'}.
+      </div>` : ''}
+
+      <div id="memed-test-result"></div>
+
       <div class="msg info" style="font-size:0.82rem;">
-        Sem token configurado, o botão "Receita Memed" não aparece — o sistema continua usando o
-        receituário em PDF local.
+        <strong>Como funciona:</strong> ao clicar "Salvar e testar", o sistema chama
+        <code>${escapeHtml(cfg.apiUrl)}/v1/sinapse-prescricao/usuarios/${escapeHtml(cfg.cidExterno || 'EXTERNAL_ID')}/token</code>
+        com sua API key/secret e recebe o JWT de sessão que será usado pelo SDK.
+        Se a Memed te indicou um endpoint diferente, ajuste a URL acima.
       </div>
     `,
     footHTML: `
       <button class="btn-danger" id="memed-clear">Limpar</button>
       <div style="flex:1"></div>
       <button class="btn-secondary" data-close>Cancelar</button>
-      <button class="btn-primary" id="memed-save">Salvar</button>
+      <button class="btn-primary" id="memed-save">Salvar e testar</button>
     `,
     onMount: (m) => {
-      m.querySelector('#memed-save').onclick = () => {
-        setMemedConfig({
-          token: m.querySelector('#memed-token').value.trim(),
-          color: m.querySelector('#memed-color').value.trim() || '#0d1b2a',
-          cid:   m.querySelector('#memed-cid').value.trim()
-        });
-        closeModal();
-        refreshMemedButton();
+      m.querySelector('#memed-save').onclick = async () => {
+        const conf = {
+          apiKey: m.querySelector('#memed-apikey').value.trim(),
+          secret: m.querySelector('#memed-secret').value.trim(),
+          apiUrl: m.querySelector('#memed-apiurl').value.trim() || 'https://api.memed.com.br',
+          sandbox: m.querySelector('#memed-sandbox').checked,
+          cidExterno: m.querySelector('#memed-cid-externo').value.trim(),
+          color: m.querySelector('#memed-color').value.trim() || '#0d1b2a'
+        };
+        if (!conf.apiKey) { alert('API key obrigatória.'); return; }
+        if (!conf.cidExterno) { alert('External ID do médico obrigatório.'); return; }
+        setMemedConfig(conf);
+        // testa imediatamente
+        const out = m.querySelector('#memed-test-result');
+        out.innerHTML = '<div class="msg info">Testando conexão com a Memed…</div>';
+        try {
+          const tk = await memedExchangeToken({ force: true });
+          out.innerHTML = `<div class="msg success">Conexão OK. JWT recebido (${tk.length} chars). Salvando…</div>`;
+          refreshMemedButton();
+          setTimeout(closeModal, 1200);
+        } catch (err) {
+          out.innerHTML = `<div class="msg error">
+            <strong>Falha:</strong> ${escapeHtml(err.message)}
+            <br><br>Possíveis causas:
+            <ul style="margin-left:18px;margin-top:6px;">
+              <li>API key/secret incorretos</li>
+              <li>External ID não cadastrado na Memed</li>
+              <li>Endpoint correto não é o assumido — confira na sua doc Memed</li>
+              <li>CORS bloqueado — pode ser necessário usar Edge Function (ver abaixo)</li>
+            </ul>
+          </div>`;
+          refreshMemedButton();
+        }
       };
       m.querySelector('#memed-clear').onclick = () => {
-        if (!confirm('Remover configurações Memed deste navegador?')) return;
-        localStorage.removeItem('memed_token');
-        localStorage.removeItem('memed_color');
-        localStorage.removeItem('memed_cid');
+        if (!confirm('Remover todas configurações Memed deste navegador?')) return;
+        ['memed_api_key','memed_secret','memed_api_url','memed_sandbox','memed_token',
+         'memed_token_exp','memed_cid_externo','memed_color']
+          .forEach(k => localStorage.removeItem(k));
         closeModal();
         refreshMemedButton();
       };
@@ -3645,19 +3715,68 @@ function openMemedConfig() {
   });
 }
 
-let memedSDKPromise = null;
-function loadMemedSDK() {
-  if (memedSDKPromise) return memedSDKPromise;
+/* Faz a troca de credenciais por um JWT de sessão.
+   Endpoint conforme padrão Memed: chama-se "usuários" da plataforma Sinapse.
+   Se a Memed te indicar outro endpoint/payload, ajuste aqui (e no fallback). */
+async function memedExchangeToken({ force = false } = {}) {
   const cfg = getMemedConfig();
-  if (!cfg.token) return Promise.reject(new Error('Token Memed não configurado.'));
+  if (!cfg.apiKey) throw new Error('API key Memed não configurada.');
+  if (!cfg.cidExterno) throw new Error('External ID do médico não configurado.');
+
+  // cache válido por mais de 5 minutos? usa.
+  if (!force && cfg.token && cfg.tokenExp && (cfg.tokenExp - Date.now()) > 5 * 60 * 1000) {
+    return cfg.token;
+  }
+
+  const url = `${cfg.apiUrl.replace(/\/$/, '')}/v1/sinapse-prescricao/usuarios/${encodeURIComponent(cfg.cidExterno)}/token`;
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Api-Key':    cfg.apiKey,
+  };
+  if (cfg.secret) headers['X-Api-Secret'] = cfg.secret;
+
+  let resp;
+  try {
+    resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify({}) });
+  } catch (err) {
+    // muito provavelmente CORS
+    throw new Error(
+      'CORS ou rede — o navegador bloqueou a chamada direta para api.memed.com.br. ' +
+      'Solução: criar uma Edge Function no Supabase que receba a requisição e chame a Memed pelo servidor. ' +
+      'Detalhe original: ' + err.message
+    );
+  }
+  let data;
+  try { data = await resp.json(); } catch (_) { data = {}; }
+  if (!resp.ok) {
+    throw new Error(data?.error || data?.message || `HTTP ${resp.status} — ${JSON.stringify(data).slice(0,200)}`);
+  }
+  // Memed retorna em formatos diferentes conforme versão; procura o token
+  const token = data.token || data.access_token || data.jwt || data.data?.token;
+  if (!token) throw new Error('Resposta sem token: ' + JSON.stringify(data).slice(0, 300));
+
+  // estima expiração: 12h se não vier no payload
+  const exp = data.expires_at
+    ? new Date(data.expires_at).getTime()
+    : (data.expires_in ? Date.now() + (+data.expires_in * 1000) : Date.now() + 12 * 3600 * 1000);
+
+  setMemedConfig({ token, tokenExp: exp });
+  return token;
+}
+
+let memedSDKPromise = null;
+async function loadMemedSDK() {
+  if (memedSDKPromise) return memedSDKPromise;
+  // garante que temos um JWT válido antes de carregar o SDK
+  const token = await memedExchangeToken();
+  const cfg = getMemedConfig();
   memedSDKPromise = new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = MEMED_SDK_URL;
-    s.dataset.token = cfg.token;
+    s.dataset.token = token;
     s.dataset.color = cfg.color;
     s.dataset.container = 'memed-container';
     s.onload = () => {
-      // espera o evento de inicialização do módulo
       const checkReady = () => {
         if (window.MdSinapsePrescricao && window.MdHub) resolve();
         else setTimeout(checkReady, 100);
