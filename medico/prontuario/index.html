@@ -450,19 +450,14 @@ permalink: /medico/prontuario/
     <!-- TAB DOCUMENTOS -->
     <div class="tab-panel" data-tab="documentos">
       <div class="doc-creator-grid">
-        <button class="doc-creator-btn" data-doctype="memed" id="btn-memed-receita" hidden style="border-left:3px solid #2d6a4f;">
-          <span class="ic">✅</span>
-          <span class="lbl">Receita Memed (assinada)</span>
-          <div class="desc">Receita digital com assinatura ICP-Brasil via Memed</div>
-        </button>
         <button class="doc-creator-btn" data-doctype="receita_simples">
           <span class="ic">℞</span>
-          <span class="lbl">Receita simples (PDF local)</span>
-          <div class="desc">Medicações comuns — sem assinatura digital</div>
+          <span class="lbl">Receita simples</span>
+          <div class="desc">Medicações comuns</div>
         </button>
         <button class="doc-creator-btn" data-doctype="receita_especial">
           <span class="ic">℞⚠</span>
-          <span class="lbl">Receita especial (PDF local)</span>
+          <span class="lbl">Receita especial</span>
           <div class="desc">Controlados — Port. 344/98</div>
         </button>
         <button class="doc-creator-btn" data-doctype="exames">
@@ -608,6 +603,16 @@ function fmtDateTime(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
 }
+/* Converte uma string ISO (UTC) ou Date em "YYYY-MM-DDTHH:MM" no fuso LOCAL,
+   formato exigido pelo <input type="datetime-local">. Sem isso, o slice(0,16)
+   da string UTC entrega o valor em outro fuso e a hora aparece deslocada. */
+function isoToLocalDatetime(iso) {
+  if (!iso) return '';
+  const d = (iso instanceof Date) ? iso : new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 function age(birth) {
   if (!birth) return null;
   const d = new Date(birth), now = new Date();
@@ -693,17 +698,14 @@ async function onSignedIn(user) {
   $('topbar-actions').innerHTML = `
     <a class="btn-link" href="/medico/">← MENU PRINCIPAL</a>
     <button class="btn-link" id="btn-ai-config" title="Configurar IA">⚙ IA</button>
-    <button class="btn-link" id="btn-memed-config" title="Configurar Memed">⚙ Memed</button>
     <span class="topbar-user">Dr(a). ${escapeHtml(profile.full_name.split(' ')[0])}</span>
     <button class="btn-link" id="btn-logout">Sair</button>
   `;
   $('btn-ai-config').onclick = openAIConfig;
-  $('btn-memed-config').onclick = openMemedConfig;
   $('btn-logout').onclick = async () => { await sb.auth.signOut(); };
 
   hide('view-loading');
   show('view-patients');
-  refreshMemedButton();
   await Promise.all([loadPatients(), loadCustomExamGroups()]);
 }
 
@@ -1102,7 +1104,7 @@ $('btn-new-consult').onclick = () => openConsultForm(null);
 function openConsultForm(c) {
   const isNew = !c;
   const data = c || {
-    consultation_date: new Date().toISOString().slice(0,16),
+    consultation_date: new Date().toISOString(), // ISO UTC; convertido pra local no input
     type: currentConsults.length ? 'retorno' : 'primeira',
     cid_codes: []
   };
@@ -1117,7 +1119,7 @@ function openConsultForm(c) {
           <div class="form-group">
             <label>Data e hora *</label>
             <input type="datetime-local" name="consultation_date" required
-                   value="${data.consultation_date ? data.consultation_date.slice(0,16) : ''}">
+                   value="${isoToLocalDatetime(data.consultation_date)}">
           </div>
           <div class="form-group">
             <label>Tipo</label>
@@ -1816,24 +1818,8 @@ function renderDocs() {
 }
 
 document.querySelectorAll('.doc-creator-btn').forEach(b => {
-  b.onclick = () => {
-    const t = b.dataset.doctype;
-    if (t === 'memed') {
-      if (!currentPatient) { alert('Abra um paciente primeiro.'); return; }
-      openMemedReceita(currentPatient);
-    } else {
-      openDocForm(t, null);
-    }
-  };
+  b.onclick = () => openDocForm(b.dataset.doctype, null);
 });
-
-/* mostra/oculta o botão "Receita Memed" conforme api_key configurada */
-function refreshMemedButton() {
-  const btn = document.getElementById('btn-memed-receita');
-  if (!btn) return;
-  const cfg = getMemedConfig();
-  btn.hidden = !(cfg.apiKey && cfg.cidExterno);
-}
 
 /* ===========================================================
    DOCUMENTOS — formulários por tipo
@@ -3566,351 +3552,74 @@ REGRAS RÍGIDAS:
   }
 }
 
-/* ===========================================================
-   MEMED — integração via SDK (widget de prescrição)
-   Token: cada médico tem o seu, obtido em sua conta Memed.
-   Doc: https://memed.com.br/desenvolvedores
-=========================================================== */
-const MEMED_SDK_URL = 'https://memed.com.br/modulos/plataforma.sinapse-prescricao/build/sinapse-prescricao.min.js';
-
-/* Configuração Memed (credenciais de integrador).
-   modo "edge"   = chama Supabase Edge Function (api_key fica no servidor)
-   modo "direto" = front chama Memed direto (rápido para testar; pode dar CORS) */
-function getMemedConfig() {
-  return {
-    mode:      localStorage.getItem('memed_mode')       || 'edge',  // 'edge' | 'direto'
-    apiKey:    localStorage.getItem('memed_api_key')    || '',
-    secret:    localStorage.getItem('memed_secret')     || '',
-    apiUrl:    localStorage.getItem('memed_api_url')    || 'https://api.memed.com.br',
-    sandbox:   localStorage.getItem('memed_sandbox')    === '1',
-    token:     localStorage.getItem('memed_token')      || '',
-    tokenExp:  +(localStorage.getItem('memed_token_exp') || 0),
-    cidExterno:localStorage.getItem('memed_cid_externo')|| '',
-    color:     localStorage.getItem('memed_color')      || '#0d1b2a',
-  };
-}
-function setMemedConfig(p) {
-  const map = {
-    mode:   'memed_mode',     apiKey: 'memed_api_key', secret: 'memed_secret',
-    apiUrl: 'memed_api_url',  color:  'memed_color',   cidExterno: 'memed_cid_externo'
-  };
-  for (const [k, key] of Object.entries(map)) {
-    if (k in p) localStorage.setItem(key, p[k] || '');
-  }
-  if ('sandbox' in p) localStorage.setItem('memed_sandbox', p.sandbox ? '1' : '0');
-  if ('token'   in p) localStorage.setItem('memed_token', p.token || '');
-  if ('tokenExp' in p) localStorage.setItem('memed_token_exp', String(p.tokenExp || 0));
-}
-
-function openMemedConfig() {
-  const cfg = getMemedConfig();
-  openModal({
-    title: 'Configuração Memed',
-    size: 'lg',
-    bodyHTML: `
-      <div class="form-row">
-        <div class="form-group">
-          <label>Modo de conexão</label>
-          <select id="memed-mode">
-            <option value="edge"   ${cfg.mode === 'edge'   ? 'selected' : ''}>Edge Function (recomendado — credenciais no Supabase, sem CORS)</option>
-            <option value="direto" ${cfg.mode === 'direto' ? 'selected' : ''}>Direto do navegador (mais simples, pode dar CORS)</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="memed-mode-edge" ${cfg.mode === 'direto' ? 'hidden' : ''}>
-        <div class="msg info" style="font-size:0.82rem;">
-          <strong>Modo Edge Function:</strong> as credenciais ficam no Supabase, NUNCA no navegador.
-          Antes de testar, faça o deploy da função e configure os secrets:
-          <pre style="background:#0d1b2a;color:#c8d8e8;padding:10px;margin-top:6px;overflow-x:auto;font-size:0.78rem;">supabase functions deploy memed-token --no-verify-jwt
-supabase secrets set MEMED_API_KEY=iJGiB4kjDGOLeDFPWMG3no9VnN7Abpqe3w1jEFm6olkhkZD6oSfSmYCm
-supabase secrets set MEMED_SECRET=Xe8M5GvBGCr4FStKfxXKisRo3SfYKI7KrTMkJpCAstzu2yXVN4av5nmL</pre>
-        </div>
-      </div>
-
-      <div id="memed-mode-direto" ${cfg.mode === 'edge' ? 'hidden' : ''}>
-        <div class="form-row cols-2">
-          <div class="form-group">
-            <label>API Key</label>
-            <input id="memed-apikey" type="password" autocomplete="off" value="${escapeHtml(cfg.apiKey)}" placeholder="sua api key Memed">
-          </div>
-          <div class="form-group">
-            <label>Secret</label>
-            <input id="memed-secret" type="password" autocomplete="off" value="${escapeHtml(cfg.secret)}" placeholder="seu secret">
-          </div>
-        </div>
-      </div>
-
-      <div class="form-row cols-2">
-        <div class="form-group">
-          <label>URL da API Memed</label>
-          <input id="memed-apiurl" value="${escapeHtml(cfg.apiUrl)}" placeholder="https://api.memed.com.br">
-          <span class="form-hint">use https://sandbox.api.memed.com.br para testes</span>
-        </div>
-        <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;">
-            <input type="checkbox" id="memed-sandbox" ${cfg.sandbox ? 'checked' : ''} style="width:auto;">
-            Ambiente de teste (sandbox)
-          </label>
-        </div>
-      </div>
-
-      <h4 class="section-title" style="margin-top:14px;">Identificação do médico</h4>
-      <div class="form-row cols-2">
-        <div class="form-group">
-          <label>External ID (seu identificador único na Memed)</label>
-          <input id="memed-cid-externo" value="${escapeHtml(cfg.cidExterno || DOCTOR_CRM_NUMBER)}" placeholder="ex: ${DOCTOR_CRM_NUMBER}">
-          <span class="form-hint">geralmente o CRM ou ID estável que vincula o médico na Memed</span>
-        </div>
-        <div class="form-group">
-          <label>Cor do widget</label>
-          <input id="memed-color" value="${escapeHtml(cfg.color)}" placeholder="#0d1b2a">
-        </div>
-      </div>
-
-      ${cfg.token ? `
-      <div class="msg success" style="font-size:0.82rem;">
-        <strong>Token JWT em cache</strong> — válido até ${cfg.tokenExp ? new Date(cfg.tokenExp).toLocaleString('pt-BR') : 'desconhecido'}.
-      </div>` : ''}
-
-      <div id="memed-test-result"></div>
-    `,
-    footHTML: `
-      <button class="btn-danger" id="memed-clear">Limpar</button>
-      <div style="flex:1"></div>
-      <button class="btn-secondary" data-close>Cancelar</button>
-      <button class="btn-primary" id="memed-save">Salvar e testar</button>
-    `,
-    onMount: (m) => {
-      const modeSel = m.querySelector('#memed-mode');
-      const syncMode = () => {
-        m.querySelector('#memed-mode-edge').hidden   = modeSel.value !== 'edge';
-        m.querySelector('#memed-mode-direto').hidden = modeSel.value !== 'direto';
-      };
-      modeSel.onchange = syncMode;
-      syncMode();
-
-      m.querySelector('#memed-save').onclick = async () => {
-        const mode = modeSel.value;
-        const conf = {
-          mode,
-          apiKey: mode === 'direto' ? m.querySelector('#memed-apikey').value.trim() : '',
-          secret: mode === 'direto' ? m.querySelector('#memed-secret').value.trim() : '',
-          apiUrl: m.querySelector('#memed-apiurl').value.trim() || 'https://api.memed.com.br',
-          sandbox: m.querySelector('#memed-sandbox').checked,
-          cidExterno: m.querySelector('#memed-cid-externo').value.trim(),
-          color: m.querySelector('#memed-color').value.trim() || '#0d1b2a'
-        };
-        if (mode === 'direto' && !conf.apiKey) { alert('API key obrigatória no modo direto.'); return; }
-        if (!conf.cidExterno) { alert('External ID do médico obrigatório.'); return; }
-        setMemedConfig(conf);
-
-        const out = m.querySelector('#memed-test-result');
-        out.innerHTML = '<div class="msg info">Testando conexão…</div>';
-        try {
-          const tk = await memedExchangeToken({ force: true });
-          out.innerHTML = `<div class="msg success">Conexão OK via <strong>${mode === 'edge' ? 'Edge Function' : 'modo direto'}</strong>. JWT recebido (${tk.length} caracteres).</div>`;
-          refreshMemedButton();
-          setTimeout(closeModal, 1500);
-        } catch (err) {
-          out.innerHTML = `<div class="msg error"><strong>Falha:</strong> ${escapeHtml(err.message)}</div>`;
-          refreshMemedButton();
-        }
-      };
-      m.querySelector('#memed-clear').onclick = () => {
-        if (!confirm('Remover todas configurações Memed deste navegador?')) return;
-        ['memed_mode','memed_api_key','memed_secret','memed_api_url','memed_sandbox',
-         'memed_token','memed_token_exp','memed_cid_externo','memed_color']
-          .forEach(k => localStorage.removeItem(k));
-        closeModal();
-        refreshMemedButton();
-      };
-    }
-  });
-}
-
-/* Faz a troca de credenciais por um JWT de sessão.
-   Modo "edge":   chama Supabase Edge Function (memed-token), que tem as credenciais.
-   Modo "direto": faz a chamada do front mesmo (pode bater em CORS). */
-async function memedExchangeToken({ force = false } = {}) {
-  const cfg = getMemedConfig();
-  if (!cfg.cidExterno) throw new Error('External ID do médico não configurado.');
-
-  // cache válido por mais de 5 minutos? reutiliza
-  if (!force && cfg.token && cfg.tokenExp && (cfg.tokenExp - Date.now()) > 5 * 60 * 1000) {
-    return cfg.token;
-  }
-
-  let data;
-  if (cfg.mode === 'edge') {
-    // chama Edge Function via Supabase client
-    const { data: respData, error } = await sb.functions.invoke('memed-token', {
-      body: {
-        external_id: cfg.cidExterno,
-        api_url:     cfg.apiUrl,
-        sandbox:     cfg.sandbox
-      }
-    });
-    if (error) {
-      throw new Error('Edge Function falhou: ' + (error.message || error)
-        + '. Confira se rodou: supabase functions deploy memed-token');
-    }
-    if (respData?.error) {
-      throw new Error('Memed: ' + respData.error
-        + (respData.details ? ' — ' + JSON.stringify(respData.details).slice(0, 200) : ''));
-    }
-    data = respData;
-  } else {
-    // modo direto: chama Memed do navegador
-    if (!cfg.apiKey) throw new Error('API key Memed não configurada.');
-    const url = `${cfg.apiUrl.replace(/\/$/, '')}/v1/sinapse-prescricao/usuarios/${encodeURIComponent(cfg.cidExterno)}/token`;
-    const headers = { 'Content-Type': 'application/json', 'X-Api-Key': cfg.apiKey };
-    if (cfg.secret) headers['X-Api-Secret'] = cfg.secret;
-    let resp;
-    try {
-      resp = await fetch(url, { method: 'POST', headers, body: JSON.stringify({}) });
-    } catch (err) {
-      throw new Error('CORS ou rede bloqueou a chamada direta. Mude o "Modo de conexão" para Edge Function. Detalhe: ' + err.message);
-    }
-    try { data = await resp.json(); } catch (_) { data = {}; }
-    if (!resp.ok) {
-      throw new Error(data?.error || data?.message || `HTTP ${resp.status} — ${JSON.stringify(data).slice(0, 200)}`);
-    }
-  }
-
-  const token = data.token || data.access_token || data.jwt || data.data?.token;
-  if (!token) throw new Error('Resposta sem token: ' + JSON.stringify(data).slice(0, 300));
-
-  const exp = data.expires_at
-    ? new Date(data.expires_at).getTime()
-    : (data.expires_in ? Date.now() + (+data.expires_in * 1000) : Date.now() + 12 * 3600 * 1000);
-
-  setMemedConfig({ token, tokenExp: exp });
-  return token;
-}
-
-let memedSDKPromise = null;
-async function loadMemedSDK() {
-  if (memedSDKPromise) return memedSDKPromise;
-  // garante que temos um JWT válido antes de carregar o SDK
-  const token = await memedExchangeToken();
-  const cfg = getMemedConfig();
-  memedSDKPromise = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = MEMED_SDK_URL;
-    s.dataset.token = token;
-    s.dataset.color = cfg.color;
-    s.dataset.container = 'memed-container';
-    s.onload = () => {
-      const checkReady = () => {
-        if (window.MdSinapsePrescricao && window.MdHub) resolve();
-        else setTimeout(checkReady, 100);
-      };
-      checkReady();
-    };
-    s.onerror = () => reject(new Error('Falha ao carregar SDK Memed.'));
-    document.head.appendChild(s);
-  });
-  return memedSDKPromise;
-}
-
-async function openMemedReceita(patient) {
-  try {
-    await loadMemedSDK();
-  } catch (err) {
-    alert('Memed: ' + err.message);
-    return;
-  }
-  // garante que existe um container para o widget
-  let container = document.getElementById('memed-container');
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'memed-container';
-    document.body.appendChild(container);
-  }
-
-  // configura paciente
-  const memedPaciente = {
-    idExterno: patient.id,
-    nome: patient.full_name,
-    cpf: (patient.cpf || '').replace(/\D/g, ''),
-    data_nascimento: patient.birth_date || '',
-    endereco: patient.address || '',
-    cidade: 'Fortaleza',
-    telefone: (patient.phone || '').replace(/\D/g, ''),
-    email: patient.email || '',
-    nome_social: patient.full_name
-  };
-
-  try {
-    window.MdHub.command.send('plataforma.prescricao', 'setPaciente', memedPaciente);
-    window.MdHub.module.show('plataforma.prescricao');
-  } catch (err) {
-    console.error('[memed] erro ao abrir prescrição:', err);
-    alert('Erro ao abrir Memed: ' + err.message);
-    return;
-  }
-
-  // listener para quando a receita for finalizada (registra no Supabase)
-  if (!window.__memedListenerInstalled) {
-    window.__memedListenerInstalled = true;
-    window.MdSinapsePrescricao.event.add('prescricaoImpressa', async function(prescricaoData) {
-      console.log('[memed] prescrição impressa:', prescricaoData);
-      try {
-        await sb.from('emr_documents').insert({
-          patient_id: currentPatient?.id || patient.id,
-          type: 'receita_simples',
-          title: 'Receita Memed',
-          issue_date: new Date().toISOString().slice(0, 10),
-          content: { memed: prescricaoData, source: 'memed' }
-        });
-        if (currentPatient) {
-          const { data } = await sb.from('emr_documents').select('*')
-            .eq('patient_id', currentPatient.id)
-            .order('issue_date', { ascending: false });
-          currentDocs = data || [];
-          renderDocs();
-          renderSummary();
-        }
-      } catch (err) {
-        console.error('[memed] erro ao salvar referência:', err);
-      }
-    });
-  }
-}
 
 /* ===========================================================
-   MODAL
+   MODAL — suporta empilhamento (open dentro de open).
+   Cada modal vira uma camada própria; closeModal() fecha apenas
+   o topo da pilha. Assim, o modal de IA não destrói o modal da
+   consulta que está embaixo.
 =========================================================== */
-let modalEscHandler = null;
+const modalStack = [];
+
 function openModal({ title, bodyHTML, footHTML = '', size = 'md', onMount }) {
-  closeModal();
   const sizeCls = size === 'lg' ? ' lg' : '';
-  $('modal-host').innerHTML = `
-    <div class="modal-bg" id="modal-bg">
-      <div class="modal${sizeCls}" role="dialog" aria-modal="true">
-        <div class="modal-head">
-          <h3>${title}</h3>
-          <button class="modal-close" data-close aria-label="Fechar">×</button>
-        </div>
-        <div class="modal-body">${bodyHTML}</div>
-        <div class="modal-foot">${footHTML}</div>
+  const id = 'modal-' + Math.random().toString(36).slice(2, 9);
+  const wrapper = document.createElement('div');
+  wrapper.className = 'modal-bg';
+  wrapper.dataset.modalId = id;
+  wrapper.style.zIndex = String(100 + modalStack.length * 10);
+  wrapper.innerHTML = `
+    <div class="modal${sizeCls}" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h3>${title}</h3>
+        <button class="modal-close" data-close aria-label="Fechar">×</button>
       </div>
+      <div class="modal-body">${bodyHTML}</div>
+      <div class="modal-foot">${footHTML}</div>
     </div>
   `;
+  document.body.appendChild(wrapper);
   document.body.style.overflow = 'hidden';
-  const modal = document.querySelector('#modal-bg .modal');
-  document.querySelectorAll('[data-close]').forEach(b => b.onclick = closeModal);
-  $('modal-bg').onclick = (e) => { if (e.target.id === 'modal-bg') closeModal(); };
-  modalEscHandler = (e) => { if (e.key === 'Escape') closeModal(); };
-  document.addEventListener('keydown', modalEscHandler);
+
+  // handlers escopados a este modal
+  wrapper.querySelectorAll('[data-close]').forEach(b => {
+    b.onclick = () => closeModal(id);
+  });
+  wrapper.addEventListener('click', (e) => {
+    if (e.target === wrapper) closeModal(id);
+  });
+  const escHandler = (e) => {
+    // Esc fecha apenas o modal do topo
+    if (e.key === 'Escape' && modalStack.length && modalStack[modalStack.length - 1].id === id) {
+      closeModal(id);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+
+  modalStack.push({ id, wrapper, escHandler });
+
+  const modal = wrapper.querySelector('.modal');
   if (onMount) onMount(modal);
 }
-function closeModal() {
-  $('modal-host').innerHTML = '';
-  document.body.style.overflow = '';
-  if (modalEscHandler) { document.removeEventListener('keydown', modalEscHandler); modalEscHandler = null; }
+
+function closeModal(id) {
+  if (!modalStack.length) return;
+  const idx = id
+    ? modalStack.findIndex(m => m.id === id)
+    : modalStack.length - 1; // fecha o topo se id não for passado
+  if (idx < 0) return;
+
+  const m = modalStack[idx];
+  try { m.wrapper.remove(); } catch (_) {}
+  document.removeEventListener('keydown', m.escHandler);
+  modalStack.splice(idx, 1);
+
+  if (!modalStack.length) {
+    document.body.style.overflow = '';
+  }
 }
+
+/* compat: alguns lugares antigos podem ler #modal-host. mantém vazio. */
 
 /* ===========================================================
    START
