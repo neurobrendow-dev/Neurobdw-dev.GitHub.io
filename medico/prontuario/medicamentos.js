@@ -20,10 +20,9 @@ window.MEDICATIONS = [
   /* =========================  NEUROLOGIA  ========================= */
 
   /* --- Antiepilépticos --- */
-  { name: 'Ácido valproico / Divalproato de sódio', aliases: ['Depakene', 'Depakote', 'Torval', 'Valpakine'], presentations: [
+  { name: 'Ácido valproico / (ou-especificar) Divalproato de sódio', aliases: ['Depakene', 'Depakote', 'Torval', 'Valpakine'], presentations: [
     '250 mg cápsula', '250 mg comprimido', '500 mg comprimido revestido',
     '500 mg comprimido de liberação prolongada', '250 mg/5 mL xarope',
-    '500 mg/5 mL xarope', '100 mg/mL solução oral'
   ]},
   { name: 'Brivaracetam', aliases: ['Briviact'], presentations: [
     '10 mg comprimido revestido', '25 mg comprimido revestido',
@@ -40,10 +39,10 @@ window.MEDICATIONS = [
   ]},
   { name: 'Clonazepam', aliases: ['Rivotril'], presentations: [
     '0,25 mg comprimido sublingual', '0,5 mg comprimido', '2 mg comprimido',
-    '2,5 mg/mL solução oral (gotas)', '1 mg/mL solução injetável'
+    '2,5 mg/mL solução oral (gotas)'
   ]},
   { name: 'Etossuximida', aliases: ['Petimid'], presentations: [
-    '250 mg cápsula', '50 mg/mL xarope'
+    '50mg/mL xarope', '50 mg/mL xarope'
   ]},
   { name: 'Fenitoína', aliases: ['Hidantal', 'Epelin', 'Fenital'], presentations: [
     '100 mg comprimido', '50 mg/mL solução injetável (ampola 5 mL)',
