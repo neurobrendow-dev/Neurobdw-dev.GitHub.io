@@ -1838,6 +1838,12 @@ function openDocForm(type, doc) {
         ${meds.map((m,i) => medEditorHTML(m,i)).join('')}
       </div>
       <button type="button" class="btn-secondary" id="btn-add-med" style="margin-bottom:14px;">+ Adicionar medicamento</button>
+      <div class="msg info" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;">
+        <input type="checkbox" id="rx-one-med-per-page" ${c.oneMedicationPerPage ? 'checked' : ''} style="width:auto;margin-top:2px;">
+        <label for="rx-one-med-per-page" style="font-size:0.84rem;line-height:1.45;cursor:pointer;">
+          Imprimir um medicamento por folha no PDF. Se preferir separar apenas alguns, use a opção "Iniciar em nova folha" dentro de cada medicamento.
+        </label>
+      </div>
       <div class="form-row">
         <div class="form-group">
           <label>Instruções gerais</label>
@@ -1853,11 +1859,16 @@ function openDocForm(type, doc) {
           name: get('[data-f=name]'),
           concentration: get('[data-f=concentration]'),
           posology: get('[data-f=posology]'),
-          quantity: get('[data-f=quantity]')
+          quantity: get('[data-f=quantity]'),
+          pageBreakBefore: !!ed.querySelector('[data-f=page-break-before]')?.checked
         };
         if (item.name) list.push(item);
       });
-      return { medications: list, instructions: m.querySelector('#rx-instructions').value.trim() };
+      return {
+        medications: list,
+        oneMedicationPerPage: !!m.querySelector('#rx-one-med-per-page')?.checked,
+        instructions: m.querySelector('#rx-instructions').value.trim()
+      };
     };
   }
 
@@ -2232,6 +2243,10 @@ function medEditorHTML(m, i) {
           <input data-f="quantity" value="${escapeHtml(m.quantity || '')}" placeholder="ex: 10 comprimidos">
         </div>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:#5a6f85;margin:2px 0 8px;cursor:pointer;">
+        <input type="checkbox" data-f="page-break-before" ${m.pageBreakBefore ? 'checked' : ''} style="width:auto;">
+        Iniciar este medicamento em nova folha no PDF
+      </label>
       <button type="button" class="btn-ghost med-rm" style="color:var(--danger);font-size:0.74rem;">Remover</button>
     </div>
   `;
@@ -2641,6 +2656,33 @@ function generateDocPDF(d) {
   }
 }
 
+function getMedicationPrintGroups(content) {
+  const meds = (content?.medications || []).filter(m => m && m.name);
+  const items = meds.map((med, index) => ({ med, index }));
+  if (!items.length) return [];
+  if (content?.oneMedicationPerPage) return items.map(item => [item]);
+
+  const groups = [];
+  let current = [];
+  items.forEach((item, pos) => {
+    if (pos > 0 && item.med.pageBreakBefore && current.length) {
+      groups.push(current);
+      current = [];
+    }
+    current.push(item);
+  });
+  if (current.length) groups.push(current);
+  return groups;
+}
+
+function contentForMedicationPrintGroup(content, group, includeInstructions) {
+  return {
+    ...content,
+    medications: group.map(item => ({ ...item.med, _pdfIndex: item.index })),
+    instructions: includeInstructions ? (content?.instructions || '') : ''
+  };
+}
+
 /* ===========================================================
    PDF — Receita ESPECIAL (Portaria 344/98)
    Layout: A4 paisagem, 2 vias lado a lado.
@@ -2653,21 +2695,29 @@ function pdfReceitaEspecial(d) {
   const W = 297, H = 210;
   const HALF = W / 2;
   const c = d.content || {};
+  const groups = getMedicationPrintGroups(c);
+  const printableGroups = groups.length ? groups : [[]];
 
-  drawReceitaEspecialVia(doc, 0,    d, c);
-  // linha tracejada divisória entre as vias
-  doc.setDrawColor(160, 160, 160);
-  doc.setLineWidth(0.2);
-  doc.setLineDashPattern([1.2, 1.2], 0);
-  doc.line(HALF, 8, HALF, H - 8);
-  doc.setLineDashPattern([], 0);
-  drawReceitaEspecialVia(doc, HALF, d, c);
+  printableGroups.forEach((group, idx) => {
+    if (idx > 0) doc.addPage();
+    const pageContent = contentForMedicationPrintGroup(c, group, idx === printableGroups.length - 1);
+    const pageNote = printableGroups.length > 1 ? `Folha ${idx + 1}/${printableGroups.length}` : '';
+
+    drawReceitaEspecialVia(doc, 0, d, pageContent, pageNote);
+    // linha tracejada divisória entre as vias
+    doc.setDrawColor(160, 160, 160);
+    doc.setLineWidth(0.2);
+    doc.setLineDashPattern([1.2, 1.2], 0);
+    doc.line(HALF, 8, HALF, H - 8);
+    doc.setLineDashPattern([], 0);
+    drawReceitaEspecialVia(doc, HALF, d, pageContent, pageNote);
+  });
 
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
   pdfSave(doc, `receita-especial-${safe}-${d.issue_date}.pdf`);
 }
 
-function drawReceitaEspecialVia(doc, xOff, d, c) {
+function drawReceitaEspecialVia(doc, xOff, d, c, pageNote = '') {
   const PAGE_H = 210;
   const VW     = 148.5;            // largura da via
   const M      = 8;                // margem dentro da via
@@ -2761,6 +2811,10 @@ function drawReceitaEspecialVia(doc, xOff, d, c) {
   drawField('Paciente:', currentPatient.full_name || '', xLeft, yp, 17); yp += 5;
   drawField('CPF:',      currentPatient.cpf       || '', xLeft, yp, 9);  yp += 5;
   drawField('Endereço:', currentPatient.address   || '', xLeft, yp, 17);
+  if (pageNote) {
+    yp += 5;
+    drawField('Folha:', pageNote, xLeft, yp, 11);
+  }
 
   // ----- 4) PRESCRIÇÕES -----
   let yMed = yp + 9;
@@ -2865,28 +2919,52 @@ function pdfReceita(d, label, isSpecial) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const M = 18, W = 210;
   const c = d.content || {};
+  const groups = getMedicationPrintGroups(c);
+  const printableGroups = groups.length ? groups : [[]];
 
-  const renderOne = (viaLabel) => {
-    let y = pdfHeader(doc, label + (viaLabel ? ` — ${viaLabel}` : ''));
+  const drawSpecialBanner = () => {
+    doc.setFillColor(255, 242, 224);
+    doc.rect(M, y, W - 2*M, 8, 'F');
+    doc.setTextColor(138, 79, 12);
+    doc.setFontSize(9);
+    doc.text('Receituário controlado — Portaria SVS/MS 344/98', M + 3, y + 5);
+    doc.setTextColor(13,27,42);
+    y += 12;
+  };
+
+  let y = 0;
+  const renderOne = (viaLabel, group, groupIndex, totalGroups) => {
+    const pageNote = totalGroups > 1 ? `Folha ${groupIndex + 1}/${totalGroups}` : '';
+    const headerLabel = label + (viaLabel ? ` — ${viaLabel}` : '') + (pageNote ? ` — ${pageNote}` : '');
+    y = pdfHeader(doc, headerLabel);
     y = pdfPatientBlock(doc, y, currentPatient);
 
-    if (isSpecial) {
-      doc.setFillColor(255, 242, 224);
-      doc.rect(M, y, W - 2*M, 8, 'F');
-      doc.setTextColor(138, 79, 12);
-      doc.setFontSize(9);
-      doc.text('Receituário controlado — Portaria SVS/MS 344/98', M + 3, y + 5);
-      doc.setTextColor(13,27,42);
-      y += 12;
-    }
+    if (isSpecial) drawSpecialBanner();
 
-    (c.medications || []).forEach((m, i) => {
-      if (y > 245) { doc.addPage(); y = 24; }
+    const newPage = () => {
+      doc.addPage();
+      y = pdfHeader(doc, headerLabel);
+      y = pdfPatientBlock(doc, y, currentPatient);
+      if (isSpecial) drawSpecialBanner();
+    };
+
+    const writeWrapped = (text, x, maxW, lineH = 5) => {
+      if (!text) return;
+      const lines = doc.splitTextToSize(text, maxW);
+      for (const ln of lines) {
+        if (y > 255) newPage();
+        doc.text(ln, x, y);
+        y += lineH;
+      }
+    };
+
+    group.forEach(({ med: m, index }) => {
+      if (y > 245) newPage();
       doc.setFont('helvetica','bold'); doc.setFontSize(11);
-      const head = `${i + 1}) ${m.name || ''}${m.concentration ? '  ·  ' + m.concentration : ''}`;
+      const head = `${index + 1}) ${m.name || ''}${m.concentration ? '  ·  ' + m.concentration : ''}`;
       doc.text(head, M, y); y += 6;
       doc.setFont('helvetica','normal'); doc.setFontSize(10);
-      if (m.posology) y = pdfWrappedText(doc, '   ' + m.posology, M, y, W - 2*M);
+      if (m.posology) writeWrapped('   ' + m.posology, M, W - 2*M);
       if (m.quantity) {
         doc.setFont('helvetica','italic');
         doc.text(`   Quantidade: ${m.quantity}`, M, y); y += 5;
@@ -2895,20 +2973,30 @@ function pdfReceita(d, label, isSpecial) {
       y += 2;
     });
 
-    if (c.instructions) {
-      if (y > 245) { doc.addPage(); y = 24; }
+    if (c.instructions && groupIndex === totalGroups - 1) {
+      if (y > 245) newPage();
       doc.setFont('helvetica','bold'); doc.setFontSize(10);
       doc.text('Orientações', M, y); y += 4;
       doc.setDrawColor(184,154,94); doc.line(M, y, M + 30, y); y += 4;
       doc.setFont('helvetica','normal');
-      pdfWrappedText(doc, c.instructions, M, y, W - 2*M);
+      writeWrapped(c.instructions, M, W - 2*M);
     }
   };
 
-  renderOne(isSpecial ? '1ª via (paciente)' : '');
+  let printedAny = false;
+  const renderGroupPage = (viaLabel, group, groupIndex, totalGroups) => {
+    if (printedAny) doc.addPage();
+    printedAny = true;
+    renderOne(viaLabel, group, groupIndex, totalGroups);
+  };
+
+  printableGroups.forEach((group, idx) => {
+    renderGroupPage(isSpecial ? '1ª via (paciente)' : '', group, idx, printableGroups.length);
+  });
   if (isSpecial) {
-    doc.addPage();
-    renderOne('2ª via (farmácia)');
+    printableGroups.forEach((group, idx) => {
+      renderGroupPage('2ª via (farmácia)', group, idx, printableGroups.length);
+    });
   }
 
   pdfFooter(doc);
