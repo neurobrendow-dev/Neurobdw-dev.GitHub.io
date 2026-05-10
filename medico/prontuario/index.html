@@ -2203,8 +2203,9 @@ function openDocForm(type, doc) {
 }
 
 function medEditorHTML(m, i) {
-  // datalist próprio de apresentações deste editor
+  // datalists próprios deste editor
   const presId = `med-pres-${Math.random().toString(36).slice(2, 9)}`;
+  const posId = `med-pos-${Math.random().toString(36).slice(2, 9)}`;
   return `
     <div class="med-editor">
       <div class="form-row cols-2">
@@ -2216,13 +2217,15 @@ function medEditorHTML(m, i) {
         <div class="form-group">
           <label>Apresentação / concentração</label>
           <input data-f="concentration" list="${presId}" value="${escapeHtml(m.concentration || '')}" placeholder="ex: 50 mg comprimido revestido">
-          <datalist id="${presId}"></datalist>
+          <datalist id="${presId}" data-role="presentations"></datalist>
         </div>
       </div>
       <div class="form-row cols-2">
         <div class="form-group">
           <label>Posologia</label>
-          <input data-f="posology" value="${escapeHtml(m.posology || '')}" placeholder="ex: 1 cp VO no início da crise, repetir após 2h se necessário">
+          <input data-f="posology" list="${posId}" value="${escapeHtml(m.posology || '')}" placeholder="ex: 1 cp VO no início da crise, repetir após 2h se necessário">
+          <datalist id="${posId}" data-role="posologies"></datalist>
+          <span class="form-hint" data-f="posology-hint" style="min-height:14px;">Escolha medicamento e apresentação para sugestões</span>
         </div>
         <div class="form-group">
           <label>Quantidade</label>
@@ -2235,11 +2238,31 @@ function medEditorHTML(m, i) {
 }
 
 function wireMedAutocomplete(editor) {
+  if (editor.dataset.medAutocompleteWired === '1') return;
+  editor.dataset.medAutocompleteWired = '1';
   const nameInput = editor.querySelector('[data-f=name]');
   const presInput = editor.querySelector('[data-f=concentration]');
-  const presDl = editor.querySelector('datalist');
+  const posInput = editor.querySelector('[data-f=posology]');
+  const presDl = editor.querySelector('datalist[data-role=presentations]');
+  const posDl = editor.querySelector('datalist[data-role=posologies]');
   const hint = editor.querySelector('[data-f=hint]');
+  const posHint = editor.querySelector('[data-f=posology-hint]');
   if (!nameInput || !presInput || !presDl) return;
+
+  const updatePosologies = (med) => {
+    if (!posDl) return;
+    if (!med || !window.getMedicationPosologyOptions) {
+      posDl.innerHTML = '';
+      if (posHint) posHint.textContent = 'Escolha medicamento e apresentação para sugestões';
+      return;
+    }
+    const options = window.getMedicationPosologyOptions(med, presInput.value);
+    posDl.innerHTML = options
+      .map(p => `<option value="${escapeHtml(p)}"></option>`).join('');
+    if (posHint && window.getMedicationPosologyHint) {
+      posHint.textContent = window.getMedicationPosologyHint(med, presInput.value);
+    }
+  };
 
   const update = () => {
     const med = findMedication(nameInput.value);
@@ -2247,10 +2270,12 @@ function wireMedAutocomplete(editor) {
       presDl.innerHTML = med.presentations
         .map(p => `<option value="${escapeHtml(p)}"></option>`).join('');
       if (hint) hint.textContent = `${med.presentations.length} apresentaç${med.presentations.length === 1 ? 'ão' : 'ões'} disponíveis`;
+      updatePosologies(med);
       // se o input vier como "Marca (Princípio)", normaliza para o princípio ativo após sair do foco
     } else {
       presDl.innerHTML = '';
       if (hint) hint.textContent = 'Medicamento não encontrado na base — você pode digitar livremente';
+      updatePosologies(null);
     }
   };
   nameInput.addEventListener('input', update);
@@ -2261,6 +2286,9 @@ function wireMedAutocomplete(editor) {
     if (paren) nameInput.value = paren[1].trim();
     update();
   });
+  presInput.addEventListener('input', () => updatePosologies(findMedication(nameInput.value)));
+  presInput.addEventListener('change', () => updatePosologies(findMedication(nameInput.value)));
+  if (posInput) posInput.addEventListener('focus', () => updatePosologies(findMedication(nameInput.value)));
   // disparo inicial caso já tenha valor
   if (nameInput.value) update();
 }

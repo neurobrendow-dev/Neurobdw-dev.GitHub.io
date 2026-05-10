@@ -8,6 +8,12 @@
    Foco: neurologia (alto volume) + clínica geral comum (HAS, DM,
    dislipidemia, GI, antibiótico, analgesia, respiratório, tireoide).
    ~280 medicamentos × 3–7 apresentações.
+
+   Posologia: ao final deste arquivo há geradores de sugestões de
+   prescrição por apresentação e por classe/medicamento. As sugestões
+   são modelos editáveis para profissional médico, baseadas em padrões
+   usuais de bula profissional/PCDT; não substituem conferência da bula
+   vigente, contraindicações e ajustes por paciente.
 =========================================================== */
 window.MEDICATIONS = [
 
@@ -1030,3 +1036,426 @@ window.MED_INDEX = (() => {
   }
   return map;
 })();
+
+/* ===========================================================
+   POSOLOGIAS — modelos editáveis para o receituário
+
+   Fontes de referência para conferência clínica:
+   - Bulário Eletrônico Anvisa, Bula do Profissional:
+     https://www.gov.br/anvisa/pt-br/sistemas/bulario-eletronico
+   - Perguntas e respostas Anvisa sobre bulas:
+     https://www.gov.br/anvisa/pt-br/assuntos/medicamentos/bulas-e-rotulos/perguntas-e-respostas-sobre-bulas
+   - PCDT/CONITEC quando aplicável:
+     https://www.gov.br/conitec/pt-br
+=========================================================== */
+window.MED_POSOLOGY_SOURCES = [
+  {
+    label: 'Bulário Eletrônico Anvisa - Bula do Profissional',
+    url: 'https://www.gov.br/anvisa/pt-br/sistemas/bulario-eletronico'
+  },
+  {
+    label: 'PCDT/CONITEC, quando aplicável',
+    url: 'https://www.gov.br/conitec/pt-br'
+  }
+];
+
+const MED_POSOLOGY_UTILS = (() => {
+  const norm = value => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  const has = (text, terms) => {
+    const n = norm(text);
+    return terms.some(term => n.includes(norm(term)));
+  };
+
+  const uniq = values => {
+    const seen = new Set();
+    const out = [];
+    for (const value of values.flat().filter(Boolean)) {
+      const key = norm(value).replace(/\s+/g, ' ').trim();
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(value);
+      }
+    }
+    return out;
+  };
+
+  const oralUnit = presentation => {
+    const p = norm(presentation);
+    if (p.includes('gotas')) return 'dose em gotas';
+    if (p.includes('xarope') || p.includes('suspensao oral') || p.includes('solucao oral') || p.includes('elixir')) return 'dose';
+    if (p.includes('capsula')) return 'cápsula';
+    if (p.includes('dragea')) return 'drágea';
+    if (p.includes('sache')) return 'sachê';
+    if (p.includes('orodispersivel')) return 'comprimido orodispersível';
+    if (p.includes('sublingual')) return 'comprimido sublingual';
+    return 'comprimido';
+  };
+
+  const presentationKind = presentation => {
+    const p = norm(presentation);
+    if (!p) return 'unknown';
+    if (p.includes('intratecal')) return 'intrathecal';
+    if (p.includes('colirio')) return 'eye';
+    if (p.includes('xampu')) return 'shampoo';
+    if (p.includes('adesivo transdermico')) return 'patch';
+    if (p.includes('creme') || p.includes('gel') || p.includes('dermico')) return 'topical';
+    if (p.includes('spray nasal')) return 'nasal';
+    if (p.includes('aerossol') || p.includes('inalatorio') || p.includes('respimat') || p.includes('diskus') || p.includes('nebulizacao')) return 'inhaled';
+    if (p.includes('infusao') || p.includes(' iv') || p.includes('iv/')) return 'iv';
+    if (p.includes(' injet') || p.includes('injetavel') || p.includes('ampola') || p.includes('po liofilizado') || p.includes('frasco-ampola') || p.includes('seringa') || p.includes('caneta')) {
+      if (p.includes(' sc') || p.includes('subcut') || p.includes('seringa') || p.includes('caneta')) return 'sc';
+      if (p.includes(' im') || p.includes('intramuscular')) return 'im';
+      return 'injectable';
+    }
+    if (p.includes('gotas') || p.includes('xarope') || p.includes('suspensao oral') || p.includes('solucao oral') || p.includes('elixir')) return 'oral-liquid';
+    if (p.includes('comprimido') || p.includes('capsula') || p.includes('dragea') || p.includes('sache') || p.includes('po para suspensao') || p.includes(' xro') || p.includes(' cr') || p.includes(' er') || p.includes(' mr') || p.includes('retard')) return 'oral-solid';
+    return 'unknown';
+  };
+
+  const byPresentation = presentation => {
+    const kind = presentationKind(presentation);
+    const unit = oralUnit(presentation);
+    const p = norm(presentation);
+
+    if (kind === 'oral-solid') {
+      return [
+        `Tomar 1 ${unit} VO 1 vez ao dia.`,
+        `Tomar 1 ${unit} VO de 12/12 horas.`,
+        `Tomar 1 ${unit} VO de 8/8 horas, por ___ dias.`,
+        `Tomar 1 ${unit} VO se necessário, respeitando a dose máxima diária da bula.`,
+        `Iniciar com 1 ${unit} VO à noite e titular conforme resposta e tolerância.`
+      ];
+    }
+    if (kind === 'oral-liquid') {
+      const unitLiquid = p.includes('gotas') ? '___ gotas' : '___ mL';
+      return [
+        `Tomar ${unitLiquid} VO 1 vez ao dia.`,
+        `Tomar ${unitLiquid} VO de 12/12 horas.`,
+        `Tomar ${unitLiquid} VO de 8/8 horas, por ___ dias.`,
+        `Tomar ${unitLiquid} VO se necessário, respeitando a dose máxima diária da bula.`,
+        `Tomar ___ mg/kg/dose VO a cada ___ horas, conforme peso e bula.`
+      ];
+    }
+    if (kind === 'sc') {
+      return [
+        'Aplicar ___ dose por via subcutânea 1 vez ao dia.',
+        'Aplicar ___ dose por via subcutânea 1 vez por semana.',
+        'Aplicar ___ dose por via subcutânea 1 vez ao mês.',
+        'Aplicar conforme esquema de titulação e orientação médica.'
+      ];
+    }
+    if (kind === 'im') {
+      return [
+        'Aplicar 1 ampola por via intramuscular, conforme indicação.',
+        'Aplicar por via intramuscular a cada ___ horas/dias, conforme bula.',
+        'Administrar em serviço de saúde, conforme diluição e técnica recomendadas.'
+      ];
+    }
+    if (kind === 'iv') {
+      return [
+        'Administrar por via intravenosa conforme diluição e tempo de infusão da bula.',
+        'Infundir por via intravenosa a cada ___ horas/dias, conforme protocolo.',
+        'Uso em serviço de saúde; monitorar durante e após a infusão conforme bula.'
+      ];
+    }
+    if (kind === 'injectable') {
+      return [
+        'Administrar por via injetável conforme via, diluição e tempo de aplicação da bula.',
+        'Aplicar 1 ampola conforme prescrição médica e protocolo do serviço.',
+        'Uso em serviço de saúde; ajustar dose conforme indicação clínica.'
+      ];
+    }
+    if (kind === 'inhaled') {
+      if (p.includes('nebulizacao')) {
+        return [
+          'Nebulizar ___ mL/dose de 6/6 horas se necessário.',
+          'Nebulizar ___ mL/dose de 8/8 ou 12/12 horas, conforme indicação.',
+          'Usar em nebulização conforme diluição recomendada em bula.'
+        ];
+      }
+      return [
+        'Inalar 1 jato/dose de 12/12 horas.',
+        'Inalar 2 jatos/doses de 12/12 horas.',
+        'Inalar 1 a 2 jatos/doses de 4/4 a 6/6 horas se necessário.',
+        'Usar conforme plano terapêutico e técnica inalatória orientada.'
+      ];
+    }
+    if (kind === 'nasal') {
+      return [
+        'Aplicar 1 jato em uma narina no início dos sintomas; repetir conforme bula se necessário.',
+        'Aplicar 1 jato em cada narina 1 vez ao dia.',
+        'Aplicar conforme orientação médica, respeitando intervalo mínimo e dose máxima.'
+      ];
+    }
+    if (kind === 'patch') {
+      return [
+        'Aplicar 1 adesivo na pele, trocar a cada 24 horas.',
+        'Aplicar 1 adesivo na pele, trocar a cada 72 horas.',
+        'Retirar o adesivo anterior antes de aplicar o novo; alternar locais de aplicação.'
+      ];
+    }
+    if (kind === 'topical') {
+      return [
+        'Aplicar fina camada no local afetado 1 vez ao dia.',
+        'Aplicar fina camada no local afetado de 12/12 horas.',
+        'Aplicar no local afetado de 8/8 horas se necessário, por ___ dias.'
+      ];
+    }
+    if (kind === 'shampoo') {
+      return [
+        'Aplicar no couro cabeludo, deixar agir por ___ minutos e enxaguar, ___ vezes por semana.',
+        'Usar no banho em dias alternados por ___ semanas.'
+      ];
+    }
+    if (kind === 'eye') {
+      return [
+        'Instilar 1 gota no(s) olho(s) afetado(s) 1 vez ao dia.',
+        'Instilar 1 gota no(s) olho(s) afetado(s) de 12/12 horas.',
+        'Instilar conforme prescrição oftalmológica.'
+      ];
+    }
+    if (kind === 'intrathecal') {
+      return [
+        'Uso intratecal por bomba/programação especializada, conforme protocolo.',
+        'Ajustar por titulação em serviço especializado.'
+      ];
+    }
+    return [
+      'Usar conforme posologia definida para a indicação clínica e bula vigente.',
+      'Ajustar dose, intervalo e duração conforme resposta, tolerância e função renal/hepática.',
+      'Completar: dose ___, via ___, intervalo ___, duração ___.'
+    ];
+  };
+
+  return { norm, has, uniq, oralUnit, presentationKind, byPresentation };
+})();
+
+function medicationClassPosologies(med, presentation) {
+  const { norm, has, oralUnit, presentationKind } = MED_POSOLOGY_UTILS;
+  const name = med?.name || '';
+  const p = norm(presentation);
+  const kind = presentationKind(presentation);
+  const unit = oralUnit(presentation);
+  const out = [];
+
+  const add = (...items) => out.push(...items);
+
+  if (has(name, ['sumatriptano', 'zolmitriptano', 'naratriptano', 'rizatriptano', 'eletriptano'])) {
+    if (kind === 'nasal') add('Aplicar 1 jato intranasal no início da crise; repetir conforme bula se necessário.');
+    else if (kind === 'sc') add('Aplicar 1 dose SC no início da crise; repetir conforme bula se necessário.');
+    else add(`Tomar 1 ${unit} VO no início da crise; repetir uma vez após 2 horas se necessário, respeitando máximo diário da bula.`);
+    add('Usar apenas para crise de enxaqueca, evitando uso excessivo de medicação sintomática.');
+  }
+
+  if (has(name, ['erenumabe'])) add('Aplicar 70 mg SC 1 vez ao mês.', 'Aplicar 140 mg SC 1 vez ao mês.');
+  if (has(name, ['galcanezumabe'])) add('Enxaqueca: aplicar 240 mg SC no primeiro mês; depois 120 mg SC 1 vez ao mês.', 'Cefaleia em salvas: aplicar conforme indicação e bula vigente.');
+  if (has(name, ['fremanezumabe'])) add('Aplicar 225 mg SC 1 vez ao mês.', 'Aplicar 675 mg SC a cada 3 meses.');
+  if (has(name, ['toxina botulinica'])) add('Aplicar conforme protocolo PREEMPT para enxaqueca crônica, em pontos padronizados.', 'Procedimento em consultório; registrar lote, diluição, unidades totais e pontos aplicados.');
+
+  if (has(name, ['acido valproico', 'divalproato', 'brivaracetam', 'carbamazepina', 'clobazam', 'clonazepam', 'etossuximida', 'fenitoina', 'fenobarbital', 'gabapentina', 'lacosamida', 'lamotrigina', 'levetiracetam', 'oxcarbazepina', 'perampanel', 'pregabalina', 'primidona', 'topiramato', 'vigabatrina', 'zonisamida'])) {
+    add(`Tomar 1 ${unit} VO de 12/12 horas, com titulação conforme resposta e tolerância.`);
+    add(`Tomar 1 ${unit} VO à noite por ___ dias; depois ajustar conforme esquema de titulação.`);
+    add('Manter uso contínuo nos horários prescritos; não suspender abruptamente.');
+  }
+
+  if (has(name, ['amitriptilina', 'nortriptilina', 'imipramina', 'clomipramina', 'mirtazapina', 'trazodona', 'agomelatina'])) {
+    add(`Tomar 1 ${unit} VO à noite.`);
+    add(`Iniciar com 1 ${unit} VO à noite e reavaliar titulação em ___ semanas.`);
+  }
+  if (has(name, ['sertralina', 'fluoxetina', 'paroxetina', 'citalopram', 'escitalopram', 'venlafaxina', 'desvenlafaxina', 'duloxetina', 'bupropiona', 'vortioxetina'])) {
+    add(`Tomar 1 ${unit} VO pela manhã.`);
+    add(`Tomar 1 ${unit} VO 1 vez ao dia, no mesmo horário.`);
+    add('Reavaliar resposta e tolerabilidade em 2 a 4 semanas.');
+  }
+  if (has(name, ['alprazolam', 'diazepam', 'lorazepam', 'bromazepam', 'midazolam', 'zolpidem', 'eszopiclona'])) {
+    add(`Tomar 1 ${unit} VO à noite se necessário.`);
+    add(`Usar a menor dose efetiva pelo menor tempo necessário; evitar álcool e dirigir.`);
+  }
+  if (has(name, ['buspirona'])) add(`Tomar 1 ${unit} VO de 12/12 horas.`, `Tomar 1 ${unit} VO de 8/8 horas.`);
+  if (has(name, ['hidroxizina'])) add(`Tomar 1 ${unit} VO à noite se prurido/ansiedade.`, `Tomar 1 ${unit} VO de 8/8 horas se necessário.`);
+  if (has(name, ['melatonina'])) add(`Tomar 1 ${unit} VO 30 a 60 minutos antes de dormir.`);
+
+  if (has(name, ['haloperidol', 'risperidona', 'quetiapina', 'olanzapina', 'aripiprazol', 'clozapina', 'ziprasidona', 'periciazina', 'levomepromazina', 'tioridazina', 'lurasidona'])) {
+    if (kind === 'injectable' || kind === 'im') add('Aplicar conforme formulação e intervalo da bula; monitorar efeitos extrapiramidais/sedação.');
+    add(`Tomar 1 ${unit} VO à noite, com titulação conforme resposta e tolerância.`);
+    add(`Tomar 1 ${unit} VO 1 vez ao dia, preferencialmente no mesmo horário.`);
+  }
+
+  if (has(name, ['levodopa'])) add(`Tomar 1 ${unit} VO de 6/6 ou 8/8 horas, conforme flutuações motoras.`, 'Tomar longe de refeição hiperproteica quando houver perda de efeito.');
+  if (has(name, ['pramipexol', 'ropinirol', 'amantadina', 'selegilina', 'rasagilina', 'entacapona', 'biperideno', 'triexifenidil', 'safinamida', 'tetrabenazina'])) add(`Tomar 1 ${unit} VO 1 vez ao dia, titular conforme resposta e tolerância.`, `Tomar 1 ${unit} VO de 12/12 horas, conforme indicação.`);
+  if (has(name, ['rotigotina'])) add('Aplicar 1 adesivo transdérmico a cada 24 horas, alternando locais de aplicação.');
+
+  if (has(name, ['donepezila'])) add(`Tomar 1 ${unit} VO à noite.`, `Tomar 1 ${unit} VO 1 vez ao dia.`);
+  if (has(name, ['rivastigmina'])) {
+    if (kind === 'patch') add('Aplicar 1 adesivo a cada 24 horas, alternando locais de aplicação.');
+    else add(`Tomar 1 ${unit} VO de 12/12 horas, com alimento.`);
+  }
+  if (has(name, ['galantamina', 'memantina'])) add(`Tomar 1 ${unit} VO 1 vez ao dia, titular conforme bula.`, `Tomar 1 ${unit} VO de 12/12 horas, conforme apresentação e dose-alvo.`);
+
+  if (has(name, ['interferona beta-1a'])) add('Avonex: aplicar 30 mcg IM 1 vez por semana.', 'Rebif: aplicar por via SC 3 vezes por semana, conforme dose prescrita.');
+  if (has(name, ['interferona beta-1b'])) add('Aplicar por via SC em dias alternados, conforme bula.');
+  if (has(name, ['acetato de glatiramer'])) add('Aplicar 20 mg SC 1 vez ao dia.', 'Aplicar 40 mg SC 3 vezes por semana.');
+  if (has(name, ['fingolimode', 'teriflunomida'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`);
+  if (has(name, ['dimetilfumarato'])) add(`Tomar 1 ${unit} VO de 12/12 horas, com alimento.`);
+  if (has(name, ['natalizumabe'])) add('Infundir 300 mg IV a cada 4 semanas, em serviço habilitado.');
+  if (has(name, ['ocrelizumabe'])) add('Infundir 300 mg IV no dia 1 e dia 15; depois 600 mg IV a cada 6 meses, conforme protocolo.');
+  if (has(name, ['cladribina'])) add('Administrar VO em ciclos anuais conforme peso e protocolo específico.');
+
+  if (has(name, ['baclofeno', 'tizanidina', 'ciclobenzaprina'])) add(`Tomar 1 ${unit} VO à noite.`, `Tomar 1 ${unit} VO de 8/8 ou 12/12 horas, conforme resposta e sedação.`);
+  if (has(name, ['carisoprodol'])) add(`Tomar 1 ${unit} VO de 8/8 horas, por curto período.`);
+
+  if (has(name, ['betaistina'])) add(`Tomar 1 ${unit} VO de 8/8 ou 12/12 horas.`);
+  if (has(name, ['dimenidrinato', 'meclizina', 'prometazina', 'ondansetrona', 'metoclopramida', 'bromoprida'])) {
+    if (['iv', 'im', 'injectable'].includes(kind)) add('Administrar 1 ampola por via IV/IM conforme indicação, intervalo e bula.');
+    else add(`Tomar 1 ${unit} VO de 8/8 horas se náuseas/vertigem.`);
+    add('Usar se necessário, respeitando intervalo mínimo e dose máxima da bula.');
+  }
+
+  if (has(name, ['captopril'])) add(`Tomar 1 ${unit} VO de 8/8 ou 12/12 horas.`, `Tomar 1 ${unit} VO se PA elevada, conforme plano individual.`);
+  if (has(name, ['enalapril', 'ramipril', 'lisinopril', 'perindopril', 'losartana', 'valsartana', 'olmesartana', 'telmisartana', 'candesartana', 'irbesartana', 'anlodipino', 'lercanidipino', 'manidipino', 'hidroclorotiazida', 'clortalidona', 'indapamida', 'espironolactona', 'bumetanida', 'nebivolol'])) {
+    add(`Tomar 1 ${unit} VO pela manhã.`);
+    add(`Tomar 1 ${unit} VO 1 vez ao dia, com controle pressórico e laboratorial conforme indicado.`);
+  }
+  if (has(name, ['nifedipino', 'verapamil', 'diltiazem', 'propranolol', 'atenolol', 'metoprolol', 'bisoprolol', 'carvedilol', 'clonidina', 'metildopa', 'hidralazina', 'doxazosina', 'prazosina'])) {
+    add(`Tomar 1 ${unit} VO 1 vez ao dia.`);
+    add(`Tomar 1 ${unit} VO de 12/12 horas, conforme controle clínico.`);
+  }
+
+  if (has(name, ['acido acetilsalicilico', 'clopidogrel', 'prasugrel'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`);
+  if (has(name, ['ticagrelor'])) add(`Tomar 1 ${unit} VO de 12/12 horas.`);
+  if (has(name, ['varfarina'])) add('Tomar VO conforme dose semanal ajustada por INR; registrar esquema por dias da semana.');
+  if (has(name, ['rivaroxabana', 'dabigatrana', 'apixabana', 'edoxabana'])) add(`Tomar 1 ${unit} VO conforme indicação, função renal e bula.`, 'Não interromper sem orientação; checar interações e função renal.');
+  if (has(name, ['enoxaparina'])) add('Aplicar por via SC conforme peso, indicação e função renal.', 'Aplicar 1 seringa SC 1 vez ao dia conforme profilaxia prescrita.');
+
+  if (has(name, ['sinvastatina', 'atorvastatina', 'rosuvastatina', 'pravastatina', 'pitavastatina', 'ezetimiba', 'ciprofibrato', 'fenofibrato', 'bezafibrato', 'gemfibrozila', 'omega-3'])) {
+    add(`Tomar 1 ${unit} VO 1 vez ao dia.`);
+    if (has(name, ['sinvastatina', 'pravastatina'])) add(`Tomar 1 ${unit} VO à noite.`);
+  }
+
+  if (has(name, ['metformina'])) add(`Tomar 1 ${unit} VO junto às refeições.`, `Tomar 1 ${unit} VO no jantar; titular conforme tolerância gastrointestinal.`);
+  if (has(name, ['glibenclamida', 'glimepirida', 'gliclazida'])) add(`Tomar 1 ${unit} VO antes do café da manhã.`, 'Orientar sinais de hipoglicemia e monitorização glicêmica.');
+  if (has(name, ['sitagliptina', 'linagliptina', 'saxagliptina', 'dapagliflozina', 'empagliflozina', 'canagliflozina', 'pioglitazona'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`);
+  if (has(name, ['vildagliptina'])) add(`Tomar 1 ${unit} VO de 12/12 horas.`, `Tomar 1 ${unit} VO 1 vez ao dia, se ajuste indicado.`);
+  if (has(name, ['acarbose', 'repaglinida'])) add(`Tomar 1 ${unit} VO antes das principais refeições.`);
+  if (has(name, ['liraglutida'])) add('Victoza: aplicar SC 1 vez ao dia, conforme titulação da bula.', 'Saxenda: aplicar SC 1 vez ao dia, conforme titulação semanal da bula.');
+  if (has(name, ['dulaglutida'])) add('Aplicar 1 caneta SC 1 vez por semana.');
+  if (has(name, ['semaglutida'])) {
+    if (p.includes('rybelsus') || kind === 'oral-solid') add('Tomar 1 comprimido VO em jejum, com pouca água; aguardar 30 minutos para alimentos/outros medicamentos.');
+    add('Ozempic/Wegovy: aplicar SC 1 vez por semana, conforme titulação da bula.');
+  }
+  if (has(name, ['tirzepatida'])) add('Aplicar 1 caneta SC 1 vez por semana, conforme titulação da bula.');
+  if (has(name, ['insulina'])) add('Aplicar ___ UI SC conforme esquema individual e glicemias.', 'Aplicar ___ UI SC antes das refeições, conforme contagem de carboidratos/correção.', 'Aplicar ___ UI SC à noite ou pela manhã, conforme esquema basal.');
+
+  if (has(name, ['levotiroxina'])) add(`Tomar 1 ${unit} VO em jejum, 30 a 60 minutos antes do café da manhã.`);
+  if (has(name, ['liotironina', 'metimazol', 'propiltiouracil'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`, `Tomar 1 ${unit} VO de 8/8 ou 12/12 horas, conforme indicação.`);
+
+  if (has(name, ['omeprazol', 'pantoprazol', 'esomeprazol', 'lansoprazol', 'rabeprazol'])) add(`Tomar 1 ${unit} VO em jejum, 30 minutos antes do café da manhã.`, `Tomar 1 ${unit} VO de 12/12 horas antes das refeições, por ___ dias.`);
+  if (has(name, ['famotidina'])) add(`Tomar 1 ${unit} VO à noite.`, `Tomar 1 ${unit} VO de 12/12 horas.`);
+  if (has(name, ['hidroxido de aluminio', 'hioscina', 'lactulose', 'picossulfato', 'bisacodil', 'polietilenoglicol', 'loperamida', 'simeticona'])) add('Usar conforme sintomas, intervalo e dose máxima da bula.', `Tomar 1 ${unit} VO conforme orientação, por ___ dias.`);
+
+  if (has(name, ['paracetamol', 'dipirona', 'ibuprofeno', 'naproxeno', 'diclofenaco', 'cetoprofeno', 'cetorolaco', 'nimesulida', 'meloxicam', 'etoricoxibe', 'celecoxibe', 'tramadol', 'codeina'])) {
+    if (['iv', 'im', 'injectable'].includes(kind)) {
+      add('Administrar 1 ampola por via IM/IV se dor, respeitando intervalo e dose máxima da bula.');
+      add('Uso injetável por curto período; reavaliar necessidade de transição para via oral.');
+    } else {
+      add(`Tomar 1 ${unit} VO se dor, de 6/6 a 8/8 horas, respeitando dose máxima diária.`);
+      add(`Tomar 1 ${unit} VO de 12/12 horas por ___ dias, se dor/inflamação.`);
+    }
+  }
+  if (has(name, ['morfina', 'oxicodona', 'fentanil', 'metadona'])) {
+    if (kind === 'patch') add('Aplicar 1 adesivo transdérmico e trocar a cada 72 horas, conforme dose prescrita.');
+    if (['iv', 'im', 'injectable'].includes(kind)) add('Administrar por via parenteral conforme plano de analgesia, monitorização e protocolo do serviço.');
+    add('Usar conforme plano individual de analgesia opioide, com orientação sobre sedação, constipação e segurança.', 'Reavaliar dor, funcionalidade e eventos adversos em curto prazo.');
+  }
+  if (has(name, ['capsaicina'])) add('Aplicar no local doloroso conforme bula; lavar as mãos após aplicação.');
+
+  if (has(name, ['amoxicilina', 'amoxicilina + clavulanato', 'cefalexina', 'cefuroxima', 'azitromicina', 'claritromicina', 'eritromicina', 'ciprofloxacino', 'levofloxacino', 'moxifloxacino', 'norfloxacino', 'sulfametoxazol', 'doxiciclina', 'metronidazol', 'fluconazol'])) {
+    if (['iv', 'im', 'injectable'].includes(kind)) {
+      add('Administrar por via IV/IM conforme dose, diluição, intervalo e tempo de infusão da bula.');
+      add('Uso em serviço de saúde; definir duração conforme foco infeccioso e protocolo local.');
+    } else {
+      add(`Tomar 1 ${unit} VO de 12/12 horas, por ___ dias.`);
+      add(`Tomar 1 ${unit} VO de 8/8 horas, por ___ dias.`);
+    }
+    add('Ajustar antimicrobiano à indicação, peso, função renal, cultura e protocolo local.');
+  }
+  if (has(name, ['ceftriaxona', 'cefepime'])) add('Administrar por via IV/IM conforme indicação, função renal e protocolo local.', 'Uso em serviço de saúde; definir diluição, tempo de infusão e duração.');
+  if (has(name, ['nistatina'])) add('Bochechar e engolir ___ mL VO de 6/6 horas, por ___ dias.', 'Manter contato na cavidade oral antes de engolir.');
+
+  if (has(name, ['salbutamol'])) {
+    if (p.includes('nebulizacao')) add('Nebulizar conforme dose prescrita e diluição em soro fisiológico.', 'Nebulizar de 4/4 a 6/6 horas se falta de ar/chiado, conforme plano.');
+    else add('Inalar 1 a 2 jatos de 4/4 a 6/6 horas se falta de ar/chiado.');
+  }
+  if (has(name, ['formoterol', 'budesonida', 'salmeterol', 'fluticasona', 'tiotropio', 'ipratropio', 'beclometasona'])) add('Inalar conforme técnica orientada e plano de asma/DPOC.', 'Inalar 1 a 2 doses de 12/12 horas, conforme apresentação.');
+  if (has(name, ['montelucaste'])) add(`Tomar 1 ${unit} VO à noite.`);
+  if (has(name, ['loratadina', 'desloratadina', 'cetirizina', 'levocetirizina', 'fexofenadina'])) add(`Tomar 1 ${unit} VO 1 vez ao dia se sintomas alérgicos.`);
+
+  if (has(name, ['prednisona', 'prednisolona', 'dexametasona', 'metilprednisolona', 'hidrocortisona'])) {
+    if (['iv', 'im', 'injectable'].includes(kind)) add('Administrar por via IV/IM conforme indicação, diluição e protocolo do serviço.');
+    else add('Usar pela manhã, após alimento, por ___ dias, conforme indicação.');
+    add('Definir necessidade de desmame conforme dose, duração e indicação.');
+  }
+
+  if (has(name, ['tansulosina', 'alfuzosina', 'dutasterida', 'finasterida', 'solifenacina', 'oxibutinina', 'mirabegrona'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`);
+  if (has(name, ['sildenafila', 'tadalafila'])) add(`Tomar 1 ${unit} VO antes da atividade sexual, conforme bula e contraindicações.`, `Tomar 1 ${unit} VO 1 vez ao dia, se esquema diário indicado.`);
+  if (has(name, ['estradiol', 'tibolona', 'medroxiprogesterona'])) add('Usar conforme esquema hormonal individual e contraindicações.', `Tomar 1 ${unit} VO 1 vez ao dia, se apresentação oral.`);
+
+  if (has(name, ['vitamina d3'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`, `Tomar 1 ${unit} VO 1 vez por semana, conforme dose prescrita.`);
+  if (has(name, ['vitamina b12', 'complexo b'])) add('Aplicar 1 ampola IM conforme esquema de reposição.', `Tomar 1 ${unit} VO 1 vez ao dia.`);
+  if (has(name, ['acido folico', 'vitamina b1', 'vitamina b6', 'carbonato de calcio', 'sulfato ferroso', 'coenzima q10'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`, `Tomar 1 ${unit} VO de 12/12 horas, conforme necessidade de reposição.`);
+
+  if (has(name, ['latanoprosta'])) add('Instilar 1 gota no(s) olho(s) acometido(s) à noite.');
+  if (has(name, ['timolol'])) add('Instilar 1 gota no(s) olho(s) acometido(s) de 12/12 horas.');
+
+  if (has(name, ['naltrexona', 'acamprosato', 'vareniclina'])) add(`Tomar 1 ${unit} VO conforme esquema de titulação/posologia da bula.`, 'Associar a acompanhamento clínico e metas terapêuticas.');
+  if (has(name, ['metotrexato'])) {
+    if (['sc', 'im', 'injectable'].includes(kind)) add('Aplicar por via SC/IM 1 vez por semana, conforme dose prescrita.');
+    add('Usar 1 vez por semana, nunca diariamente; associar ácido fólico conforme prescrição.', 'Registrar dia fixo da semana e orientar sinais de toxicidade.');
+  }
+  if (has(name, ['hidroxicloroquina', 'leflunomida', 'sulfasalazina', 'alopurinol'])) add(`Tomar 1 ${unit} VO 1 vez ao dia, com monitorização conforme indicação.`);
+  if (has(name, ['colchicina'])) add(`Tomar 1 ${unit} VO 1 a 2 vezes ao dia, conforme indicação e tolerância gastrointestinal.`);
+
+  if (has(name, ['litio'])) add('Tomar VO conforme esquema individual; monitorar litemia, função renal e tireoidiana.', `Tomar 1 ${unit} VO à noite ou de 12/12 horas, conforme nível sérico.`);
+  if (has(name, ['metilfenidato', 'lisdexanfetamina', 'atomoxetina'])) add(`Tomar 1 ${unit} VO pela manhã.`, 'Ajustar conforme resposta, apetite, sono, pressão arterial e frequência cardíaca.');
+  if (has(name, ['lidocaina'])) {
+    if (['iv', 'im', 'injectable'].includes(kind)) add('Usar por infiltração/anestesia local conforme dose máxima, técnica e protocolo.');
+    else add('Aplicar no local doloroso conforme apresentação e dose máxima da bula.', 'Adesivo: aplicar por até 12 horas e retirar por 12 horas.');
+  }
+  if (has(name, ['diclofenaco gel'])) add('Aplicar no local doloroso de 6/6 a 8/8 horas, por ___ dias.');
+  if (has(name, ['cetoconazol'])) add('Usar conforme apresentação: comprimido somente com indicação específica; creme/xampu conforme local e duração.');
+
+  return out;
+}
+
+window.getMedicationPosologyOptions = function getMedicationPosologyOptions(med, presentation = '') {
+  if (!med) return [];
+  const { norm, uniq, byPresentation, presentationKind } = MED_POSOLOGY_UTILS;
+  const kind = presentationKind(presentation);
+  const compatibleWithPresentation = option => {
+    if (!presentation || kind === 'unknown') return true;
+    const o = norm(option);
+    const isOral = kind === 'oral-solid' || kind === 'oral-liquid';
+    if (!isOral && (o.startsWith('tomar') || /\bvo\b/.test(o))) return false;
+    if (kind !== 'inhaled' && (o.startsWith('inalar') || o.startsWith('nebulizar'))) return false;
+    if (kind !== 'nasal' && o.includes('intranasal')) return false;
+    if (kind !== 'eye' && o.startsWith('instilar')) return false;
+    if (kind !== 'patch' && o.includes('adesivo')) return false;
+    if (kind !== 'topical' && (o.startsWith('aplicar fina camada') || o.includes('local doloroso'))) return false;
+    if (!['sc', 'im', 'iv', 'injectable', 'intrathecal'].includes(kind) && (o.includes('por via subcutanea') || o.includes(' sc ') || o.includes('intramuscular') || o.includes(' intravenosa') || o.includes('intratecal'))) return false;
+    return true;
+  };
+  const specific = medicationClassPosologies(med, presentation).filter(compatibleWithPresentation);
+  const generic = byPresentation(presentation);
+  return uniq(specific.length ? specific : generic).slice(0, 14);
+};
+
+window.getMedicationPosologyHint = function getMedicationPosologyHint(med, presentation = '') {
+  if (!med) return 'Escolha um medicamento para ver sugestões de posologia.';
+  const total = window.getMedicationPosologyOptions(med, presentation).length;
+  const scope = presentation ? 'para esta apresentação' : 'após escolher a apresentação';
+  return `${total} sugest${total === 1 ? 'ão' : 'ões'} ${scope}. Conferir bula profissional/PCDT para dose máxima, contraindicações e ajustes.`;
+};
