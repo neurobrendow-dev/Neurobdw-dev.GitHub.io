@@ -53,7 +53,7 @@ window.MEDICATIONS = [
     '100 mg/mL solução injetável (ampola 1 mL)', '200 mg/mL solução injetável'
   ]},
   { name: 'Gabapentina', aliases: ['Neurontin', 'Progresse', 'Gamibetal'], presentations: [
-    '300 mg cápsula', '400 mg cápsula', '600 mg comprimido revestido', '800 mg comprimido revestido'
+    '300 mg cápsula', '400 mg cápsula', '600 mg comprimido revestido',
   ]},
   { name: 'Lacosamida', aliases: ['Vimpat'], presentations: [
     '50 mg comprimido revestido', '100 mg comprimido revestido',
@@ -77,8 +77,8 @@ window.MEDICATIONS = [
     '6 mg comprimido revestido', '8 mg comprimido revestido', '10 mg comprimido revestido', '12 mg comprimido revestido'
   ]},
   { name: 'Pregabalina', aliases: ['Lyrica', 'Prebictal', 'Lyripar', 'Dorene'], presentations: [
-    '25 mg cápsula', '50 mg cápsula', '75 mg cápsula',
-    '100 mg cápsula', '150 mg cápsula', '300 mg cápsula', '20 mg/mL solução oral'
+    '25 mg cápsula', '35 mg cápsula', '50 mg cápsula', '75 mg cápsula',
+    '100 mg cápsula', '150 mg cápsula', '300 mg cápsula', '25 mg/mL solução oral', '20 mg/mL solução oral'
   ]},
   { name: 'Primidona', aliases: ['Primid'], presentations: [
     '100 mg comprimido', '250 mg comprimido'
