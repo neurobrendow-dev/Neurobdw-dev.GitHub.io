@@ -1,13 +1,13 @@
 ---
 layout: post
-title: "Medicações para epilepsia: principais opções e como escolher com segurança"
-description: "Conheça as principais medicações usadas no tratamento da epilepsia, quando elas costumam ser indicadas e quais cuidados precisam ser discutidos com o neurologista."
+title: "Medicações para epilepsia: principais opções, canabidiol e como escolher com segurança"
+description: "Conheça as principais medicações usadas no tratamento da epilepsia, incluindo o canabidiol, quando elas costumam ser indicadas e quais cuidados discutir com o neurologista."
 date: 2026-05-10 09:00:00 -0300
 category: "Epilepsia"
-tags: [epilepsia, crise epiléptica, anticonvulsivantes, medicações anticrise, levetiracetam, lamotrigina, valproato, neurologista Fortaleza]
-reading_time: 9
-cover: /assets/img/posts/medicamentos-epi.webp
-image: /assets/img/posts/medicamentos-epi.webp
+tags: [epilepsia, crise epiléptica, anticonvulsivantes, medicações anticrise, canabidiol, CBD, levetiracetam, lamotrigina, valproato, neurologista Fortaleza]
+reading_time: 10
+cover: /assets/img/posts/quando-procurar-neurologista.webp
+image: /assets/img/posts/quando-procurar-neurologista.webp
 author: "Dr. Brendow Mártin"
 ---
 
@@ -15,7 +15,7 @@ O tratamento da epilepsia mudou muito nas últimas décadas. Hoje, temos várias
 
 Mas existe um ponto essencial: **não existe uma medicação "melhor para epilepsia" em todos os casos**.
 
-A escolha depende do tipo de crise, da síndrome epiléptica, da idade, do sexo, da possibilidade de gestação, de outras doenças, de interações medicamentosas, do custo, da disponibilidade e da tolerabilidade individual.
+A escolha depende do tipo de crise, da síndrome epiléptica, da idade, do sexo, do risco de gestação, de outras doenças, de interações medicamentosas, do custo, da disponibilidade e da tolerabilidade individual.
 
 Por isso, o objetivo deste artigo não é ensinar ninguém a escolher remédio sozinho. É ajudar você a entender os principais grupos de medicações, quais são seus usos mais comuns e quais cuidados merecem conversa cuidadosa com o neurologista.
 
@@ -29,7 +29,7 @@ De forma simplificada, as crises podem ser:
 - **Generalizadas:** envolvem redes cerebrais dos dois hemisférios desde o início. Incluem crises tônico-clônicas, ausências, mioclonias, crises tônicas e atônicas.
 - **De início desconhecido:** quando a história ou os exames ainda não permitem definir claramente a origem.
 
-Essa distinção é muito importante. Algumas medicações funcionam bem para crises focais, mas podem piorar certos tipos de epilepsia generalizada, especialmente crises de ausência ou mioclônicas.
+Essa distinção muda tudo. Algumas medicações funcionam bem para crises focais, mas podem piorar certos tipos de epilepsia generalizada, especialmente crises de ausência ou mioclônicas.
 
 > Em epilepsia, o remédio certo começa pelo diagnóstico certo.
 
@@ -76,7 +76,7 @@ A lamotrigina é uma opção importante em epilepsias focais e em algumas epilep
 
 - Boa tolerabilidade para muitos pacientes
 - Menor tendência a sedação em comparação com algumas medicações mais antigas
-- Pode ser útil em crises focais e generalizadas
+- Pode ser útil em crises focais e tônico-clônicas generalizadas
 - Perfil relevante em pacientes com comorbidade de humor
 
 ### Cuidados
@@ -243,9 +243,46 @@ A vigabatrina é usada em situações específicas, como espasmos epilépticos, 
 - Exige acompanhamento especializado
 - Não é uma medicação de uso amplo para qualquer epilepsia
 
+## Canabidiol
+
+O canabidiol, ou CBD, ganhou espaço no tratamento de epilepsias de difícil controle. Mas é importante separar duas coisas: **canabidiol não é tratamento para qualquer epilepsia** e não deve ser visto como substituto simples das medicações anticrise tradicionais.
+
+A evidência mais consistente envolve o uso de canabidiol purificado como terapia adicional em síndromes epilépticas farmacorresistentes, especialmente:
+
+- Síndrome de Dravet
+- Síndrome de Lennox-Gastaut
+- Complexo da esclerose tuberosa
+
+Nesses cenários, o canabidiol pode reduzir a frequência de crises em parte dos pacientes, geralmente como adjuvante, isto é, associado a outras medicações. Ele costuma ser considerado quando já houve falha de tratamentos bem indicados e em dose adequada.
+
+### Pontos fortes
+
+- Pode ajudar em epilepsias farmacorresistentes específicas
+- Tem evidência melhor em Dravet, Lennox-Gastaut e esclerose tuberosa
+- Pode ser uma alternativa quando múltiplas medicações já falharam
+- É administrado por via oral, o que facilita o uso em alguns pacientes
+
+### Cuidados
+
+- Pode causar sonolência, diarreia, redução de apetite, fadiga e alteração de comportamento
+- Pode elevar enzimas do fígado, especialmente quando usado junto com valproato
+- Pode aumentar sonolência quando associado ao clobazam
+- Exige checagem de interações medicamentosas
+- Deve ter procedência regular, concentração conhecida e acompanhamento médico
+
+Um ponto prático: produtos com nomes parecidos podem ter concentrações muito diferentes de CBD, quantidades variáveis de THC e padrões distintos de controle de qualidade. Por isso, "usar canabidiol" não é uma informação suficiente. O neurologista precisa saber exatamente qual produto, concentração, dose, via de uso, composição e origem.
+
+### E o canabidiol no Brasil?
+
+No Brasil, a Anvisa atualizou em 2026 o marco regulatório de produtos de cannabis para uso medicinal e regulamentou etapas de produção com fins medicinais. Há produtos regularizados que podem estar disponíveis em farmácias e drogarias, além de fluxos específicos de importação e protocolos estaduais em algumas situações.
+
+Mesmo assim, o acesso ainda é heterogêneo. Pode depender da indicação, do produto, da disponibilidade local, de protocolos estaduais, de custo e de documentação médica de epilepsia farmacorresistente.
+
+O mais importante: canabidiol não deve ser comprado de origem duvidosa, manipulado sem rastreabilidade ou usado sem plano de monitorização. Em epilepsia, a diferença entre um produto controlado e um produto irregular pode significar perda de controle das crises.
+
 ## Outras medicações
 
-Além das opções acima, existem medicações como brivaracetam, perampanel, pregabalina, zonisamida, eslicarbazepina, primidona, gabapentina, cenobamato e canabidiol, cada uma com indicações, restrições, custos e disponibilidade próprios.
+Além das opções acima, existem medicações como brivaracetam, perampanel, pregabalina, zonisamida, eslicarbazepina, primidona, gabapentina e cenobamato, cada uma com indicações, restrições, custos e disponibilidade próprios.
 
 Algumas são mais usadas como terapia adicional. Outras ficam reservadas para epilepsias refratárias ou síndromes específicas. O fato de uma medicação ser "mais nova" não significa automaticamente que ela seja melhor para todos.
 
@@ -257,6 +294,7 @@ Algumas são mais usadas como terapia adicional. Outras ficam reservadas para ep
 | Crises tônico-clônicas generalizadas | Lamotrigina, levetiracetam, valproato, topiramato |
 | Crises de ausência | Etossuximida, valproato, lamotrigina em situações selecionadas |
 | Crises mioclônicas | Levetiracetam, valproato, topiramato, outras opções conforme a síndrome |
+| Síndromes farmacorresistentes específicas | Canabidiol em Dravet, Lennox-Gastaut e esclerose tuberosa, quando bem indicado |
 | Epilepsia refratária | Combinações individualizadas, avaliação em centro especializado, dieta cetogênica, neuromodulação ou cirurgia em casos selecionados |
 
 Esse quadro não substitui avaliação médica. Ele serve para mostrar por que o mesmo remédio não serve para todos os pacientes.
@@ -265,7 +303,9 @@ Esse quadro não substitui avaliação médica. Ele serve para mostrar por que o
 
 O Protocolo Clínico e Diretrizes Terapêuticas da Epilepsia do Ministério da Saúde lista medicações como ácido valproico/valproato de sódio, carbamazepina, clobazam, clonazepam, etossuximida, fenitoína, fenobarbital, gabapentina, lamotrigina, levetiracetam, primidona, topiramato e vigabatrina.
 
-Na prática, o acesso pode variar conforme indicação, documentação, disponibilidade local e fluxos da rede. Por isso, o relatório médico bem feito faz diferença: ele deve descrever tipo de crise, diagnóstico, tratamentos prévios, doses utilizadas, resposta, efeitos adversos e justificativa da escolha.
+Na prática, o acesso pode variar conforme indicação, documentação, disponibilidade local e fluxos da rede. O canabidiol, por sua vez, costuma seguir caminhos próprios: produtos regularizados, importação autorizada, protocolos estaduais específicos ou discussão judicial em casos selecionados.
+
+Por isso, o relatório médico bem feito faz diferença: ele deve descrever tipo de crise, diagnóstico, tratamentos prévios, doses utilizadas, resposta, efeitos adversos, refratariedade e justificativa da escolha.
 
 ## Nunca suspenda por conta própria
 
@@ -290,7 +330,7 @@ O acompanhamento não serve apenas para renovar receita. Serve para confirmar o 
 
 ## Em resumo
 
-As medicações para epilepsia são muitas, mas a escolha precisa ser precisa. Levetiracetam, lamotrigina, carbamazepina, oxcarbazepina, valproato, topiramato, lacosamida, fenitoína, fenobarbital, clobazam, clonazepam, etossuximida e vigabatrina têm papéis diferentes.
+As medicações para epilepsia são muitas, mas a escolha precisa ser precisa. Levetiracetam, lamotrigina, carbamazepina, oxcarbazepina, valproato, topiramato, lacosamida, fenitoína, fenobarbital, clobazam, clonazepam, etossuximida, vigabatrina e canabidiol têm papéis diferentes.
 
 O melhor tratamento é aquele que controla as crises, preserva cognição, minimiza efeitos adversos, respeita o projeto de vida do paciente e cabe na realidade de acesso.
 
@@ -303,6 +343,8 @@ Se você tem epilepsia, teve uma primeira crise ou está com efeitos colaterais 
 - [Ministério da Saúde - Protocolo Clínico e Diretrizes Terapêuticas da Epilepsia](https://www.gov.br/saude/pt-br/assuntos/pcdt/e/epilepsia/view)
 - [NICE Guideline NG217 - Epilepsies in children, young people and adults](https://www.nice.org.uk/guidance/ng217/chapter/treating-epileptic-seizures-in-children-young-people-and-adults)
 - [ILAE/WHO/IBE - Epilepsy and pregnancy in women and girls](https://www.ilae.org/congresses/webinars/who-ilae-ibe-optimizing-care-epilepsy-and-pregnancy-in-women-and-girls)
+- [Anvisa - regras para produção e produtos de cannabis medicinal](https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/2026/anvisa-publica-regras-para-producao-de-cannabis-medicinal)
+- [DailyMed - Epidiolex (cannabidiol) prescribing information](https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?audience=consumer&setid=8bf27097-4870-43fb-94f0-f3d0871d1eec)
 
 Escrito e revisado por Dr. Brendow Mártin  
 Neurologista - CRM/CE 22318 · RQE 18935  
