@@ -4,7 +4,7 @@ title: "Medicações para epilepsia: principais opções, canabidiol e como esco
 description: "Conheça as principais medicações usadas no tratamento da epilepsia, incluindo o canabidiol, quando elas costumam ser indicadas e quais cuidados discutir com o neurologista."
 date: 2026-05-10 09:00:00 -0300
 category: "Epilepsia"
-tags: [epilepsia, crise epiléptica, anticonvulsivantes, medicações anticrise, canabidiol, CBD, levetiracetam, lamotrigina, valproato, neurologista Fortaleza]
+tags: [epilepsia, crise epiléptica, anticonvulsivantes, medicações anticrise, canabidiol, CBD, levetiracetam, lamotrigina, valproato, depakene, gardenal, neurologista Fortaleza]
 reading_time: 10
 cover: /assets/img/posts/medicamentos-epi.webp
 image: /assets/img/posts/medicamentos-epi.webp
@@ -15,7 +15,7 @@ O tratamento da epilepsia mudou muito nas últimas décadas. Hoje, temos várias
 
 Mas existe um ponto essencial: **não existe uma medicação "melhor para epilepsia" em todos os casos**.
 
-A escolha depende do tipo de crise, da síndrome epiléptica, da idade, do sexo, do risco de gestação, de outras doenças, de interações medicamentosas, do custo, da disponibilidade e da tolerabilidade individual.
+A escolha depende do tipo de crise, da síndrome epiléptica, da idade, do sexo, da possibilidade de gestação, de outras doenças, de interações medicamentosas, do custo, da disponibilidade e da tolerabilidade individual.
 
 Por isso, o objetivo deste artigo não é ensinar ninguém a escolher remédio sozinho. É ajudar você a entender os principais grupos de medicações, quais são seus usos mais comuns e quais cuidados merecem conversa cuidadosa com o neurologista.
 
@@ -76,7 +76,7 @@ A lamotrigina é uma opção importante em epilepsias focais e em algumas epilep
 
 - Boa tolerabilidade para muitos pacientes
 - Menor tendência a sedação em comparação com algumas medicações mais antigas
-- Pode ser útil em crises focais e tônico-clônicas generalizadas
+- Pode ser útil em crises focais e generalizadas
 - Perfil relevante em pacientes com comorbidade de humor
 
 ### Cuidados
@@ -251,14 +251,14 @@ A evidência mais consistente envolve o uso de canabidiol purificado como terapi
 
 - Síndrome de Dravet
 - Síndrome de Lennox-Gastaut
-- Complexo da esclerose tuberosa
+- Complexo da Esclerose Tuberosa
 
 Nesses cenários, o canabidiol pode reduzir a frequência de crises em parte dos pacientes, geralmente como adjuvante, isto é, associado a outras medicações. Ele costuma ser considerado quando já houve falha de tratamentos bem indicados e em dose adequada.
 
 ### Pontos fortes
 
 - Pode ajudar em epilepsias farmacorresistentes específicas
-- Tem evidência melhor em Dravet, Lennox-Gastaut e esclerose tuberosa
+- Tem evidência melhor em Dravet, Lennox-Gastaut e Esclerose Tuberosa
 - Pode ser uma alternativa quando múltiplas medicações já falharam
 - É administrado por via oral, o que facilita o uso em alguns pacientes
 
@@ -341,10 +341,8 @@ Se você tem epilepsia, teve uma primeira crise ou está com efeitos colaterais 
 ## Fontes consultadas
 
 - [Ministério da Saúde - Protocolo Clínico e Diretrizes Terapêuticas da Epilepsia](https://www.gov.br/saude/pt-br/assuntos/pcdt/e/epilepsia/view)
-- [NICE Guideline NG217 - Epilepsies in children, young people and adults](https://www.nice.org.uk/guidance/ng217/chapter/treating-epileptic-seizures-in-children-young-people-and-adults)
-- [ILAE/WHO/IBE - Epilepsy and pregnancy in women and girls](https://www.ilae.org/congresses/webinars/who-ilae-ibe-optimizing-care-epilepsy-and-pregnancy-in-women-and-girls)
 - [Anvisa - regras para produção e produtos de cannabis medicinal](https://www.gov.br/anvisa/pt-br/assuntos/noticias-anvisa/2026/anvisa-publica-regras-para-producao-de-cannabis-medicinal)
-- [DailyMed - Epidiolex (cannabidiol) prescribing information](https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?audience=consumer&setid=8bf27097-4870-43fb-94f0-f3d0871d1eec)
+
 
 Escrito e revisado por Dr. Brendow Mártin  
 Neurologista - CRM/CE 22318 · RQE 18935  
