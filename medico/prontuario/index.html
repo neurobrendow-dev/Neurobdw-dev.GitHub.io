@@ -1909,6 +1909,12 @@ function openDocForm(type, doc) {
         ${exams.map((e,i) => examEditorHTML(e,i)).join('')}
       </div>
       <button type="button" class="btn-secondary" id="btn-add-exam" style="margin-bottom:14px;">+ Adicionar exame manual</button>
+      <div class="msg info" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;">
+        <input type="checkbox" id="ex-one-exam-per-page" ${c.oneExamPerPage ? 'checked' : ''} style="width:auto;margin-top:2px;">
+        <label for="ex-one-exam-per-page" style="font-size:0.84rem;line-height:1.45;cursor:pointer;">
+          Imprimir um exame por folha no PDF. Se preferir separar apenas alguns, use a opção "Iniciar em nova folha" dentro de cada exame.
+        </label>
+      </div>
       <datalist id="exam-catalog">
         ${(window.EXAM_CATALOG || []).map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}
       </datalist>
@@ -1930,10 +1936,12 @@ function openDocForm(type, doc) {
       m.querySelectorAll('.exam-editor').forEach(ed => {
         const name = ed.querySelector('[data-f=name]').value.trim();
         const specs = ed.querySelector('[data-f=specs]').value.trim();
-        if (name) list.push({ name, specs });
+        const pageBreakBefore = !!ed.querySelector('[data-f=page-break-before]')?.checked;
+        if (name) list.push({ name, specs, pageBreakBefore });
       });
       return {
         exams: list,
+        oneExamPerPage: !!m.querySelector('#ex-one-exam-per-page')?.checked,
         indication: m.querySelector('#ex-indication').value.trim(),
         cid: m.querySelector('#ex-cid').value.trim()
       };
@@ -2408,6 +2416,10 @@ function examEditorHTML(e, i) {
           <input data-f="specs" value="${escapeHtml(e.specs || '')}" placeholder="ex: com contraste">
         </div>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:#5a6f85;margin:2px 0 8px;cursor:pointer;">
+        <input type="checkbox" data-f="page-break-before" ${e.pageBreakBefore ? 'checked' : ''} style="width:auto;">
+        Iniciar este exame em nova folha no PDF
+      </label>
       <button type="button" class="btn-ghost exam-rm" style="color:var(--danger);font-size:0.74rem;">Remover</button>
     </div>`;
 }
@@ -2681,6 +2693,25 @@ function contentForMedicationPrintGroup(content, group, includeInstructions) {
     medications: group.map(item => ({ ...item.med, _pdfIndex: item.index })),
     instructions: includeInstructions ? (content?.instructions || '') : ''
   };
+}
+
+function getExamPrintGroups(content) {
+  const exams = (content?.exams || []).filter(e => e && e.name);
+  const items = exams.map((exam, index) => ({ exam, index }));
+  if (!items.length) return [];
+  if (content?.oneExamPerPage) return items.map(item => [item]);
+
+  const groups = [];
+  let current = [];
+  items.forEach((item, pos) => {
+    if (pos > 0 && item.exam.pageBreakBefore && current.length) {
+      groups.push(current);
+      current = [];
+    }
+    current.push(item);
+  });
+  if (current.length) groups.push(current);
+  return groups;
 }
 
 /* ===========================================================
@@ -3009,36 +3040,62 @@ function pdfExames(d, label) {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const M = 18, W = 210;
   const c = d.content || {};
+  const groups = getExamPrintGroups(c);
+  const printableGroups = groups.length ? groups : [[]];
 
-  let y = pdfHeader(doc, label);
-  y = pdfPatientBlock(doc, y, currentPatient);
+  printableGroups.forEach((group, groupIndex) => {
+    if (groupIndex > 0) doc.addPage();
+    const pageNote = printableGroups.length > 1 ? ` — Folha ${groupIndex + 1}/${printableGroups.length}` : '';
+    const headerLabel = label + pageNote;
+    let y = pdfHeader(doc, headerLabel);
+    y = pdfPatientBlock(doc, y, currentPatient);
 
-  doc.setFont('helvetica','bold'); doc.setFontSize(11);
-  doc.text('Solicito', M, y); y += 6;
-  doc.setFont('helvetica','normal'); doc.setFontSize(10);
-  (c.exams || []).forEach((e, i) => {
-    if (y > 255) { doc.addPage(); y = 24; }
-    const txt = `${i + 1}.  ${e.name}${e.specs ? '  —  ' + e.specs : ''}`;
-    y = pdfWrappedText(doc, txt, M, y, W - 2*M, 6);
-    y += 1;
+    const newPage = () => {
+      doc.addPage();
+      y = pdfHeader(doc, headerLabel);
+      y = pdfPatientBlock(doc, y, currentPatient);
+    };
+
+    const writeWrapped = (text, x, maxW, lineH = 5) => {
+      if (!text) return;
+      const lines = doc.splitTextToSize(text, maxW);
+      for (const ln of lines) {
+        if (y > 255) newPage();
+        doc.text(ln, x, y);
+        y += lineH;
+      }
+    };
+
+    doc.setFont('helvetica','bold'); doc.setFontSize(11);
+    doc.text('Solicito', M, y); y += 6;
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    group.forEach(({ exam: e, index }) => {
+      if (y > 255) newPage();
+      const txt = `${index + 1}.  ${e.name}${e.specs ? '  —  ' + e.specs : ''}`;
+      writeWrapped(txt, M, W - 2*M, 6);
+      y += 1;
+    });
+
+    if (groupIndex === printableGroups.length - 1) {
+      if (c.indication) {
+        y += 4;
+        if (y > 255) newPage();
+        doc.setFont('helvetica','bold'); doc.setFontSize(10);
+        doc.text('Indicação clínica', M, y); y += 4;
+        doc.setDrawColor(184,154,94); doc.line(M, y, M + 40, y); y += 4;
+        doc.setFont('helvetica','normal');
+        writeWrapped(c.indication, M, W - 2*M);
+      }
+      if (c.cid) {
+        y += 4;
+        if (y > 255) newPage();
+        doc.setFont('helvetica','bold'); doc.setFontSize(10);
+        doc.text(`CID-10: `, M, y);
+        doc.setFont('helvetica','normal');
+        doc.text(c.cid, M + 18, y);
+      }
+    }
   });
-
-  if (c.indication) {
-    y += 4;
-    if (y > 255) { doc.addPage(); y = 24; }
-    doc.setFont('helvetica','bold'); doc.setFontSize(10);
-    doc.text('Indicação clínica', M, y); y += 4;
-    doc.setDrawColor(184,154,94); doc.line(M, y, M + 40, y); y += 4;
-    doc.setFont('helvetica','normal');
-    y = pdfWrappedText(doc, c.indication, M, y, W - 2*M);
-  }
-  if (c.cid) {
-    y += 4;
-    doc.setFont('helvetica','bold'); doc.setFontSize(10);
-    doc.text(`CID-10: `, M, y);
-    doc.setFont('helvetica','normal');
-    doc.text(c.cid, M + 18, y);
-  }
 
   pdfFooter(doc);
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
