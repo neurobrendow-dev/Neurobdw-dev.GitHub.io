@@ -1912,7 +1912,7 @@ function openDocForm(type, doc) {
       <div class="msg info" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;">
         <input type="checkbox" id="ex-one-exam-per-page" ${c.oneExamPerPage ? 'checked' : ''} style="width:auto;margin-top:2px;">
         <label for="ex-one-exam-per-page" style="font-size:0.84rem;line-height:1.45;cursor:pointer;">
-          Imprimir um exame por folha no PDF. Se preferir separar apenas alguns, use a opção "Iniciar em nova folha" dentro de cada exame.
+          Imprimir um exame por folha no PDF. Se preferir separar apenas alguns, use a opção "Deixar este exame sozinho em uma folha" dentro de cada exame.
         </label>
       </div>
       <datalist id="exam-catalog">
@@ -2418,7 +2418,7 @@ function examEditorHTML(e, i) {
       </div>
       <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:#5a6f85;margin:2px 0 8px;cursor:pointer;">
         <input type="checkbox" data-f="page-break-before" ${e.pageBreakBefore ? 'checked' : ''} style="width:auto;">
-        Iniciar este exame em nova folha no PDF
+        Deixar este exame sozinho em uma folha no PDF
       </label>
       <button type="button" class="btn-ghost exam-rm" style="color:var(--danger);font-size:0.74rem;">Remover</button>
     </div>`;
@@ -2703,10 +2703,14 @@ function getExamPrintGroups(content) {
 
   const groups = [];
   let current = [];
-  items.forEach((item, pos) => {
-    if (pos > 0 && item.exam.pageBreakBefore && current.length) {
-      groups.push(current);
-      current = [];
+  items.forEach((item) => {
+    if (item.exam.pageBreakBefore) {
+      if (current.length) {
+        groups.push(current);
+        current = [];
+      }
+      groups.push([item]);
+      return;
     }
     current.push(item);
   });
