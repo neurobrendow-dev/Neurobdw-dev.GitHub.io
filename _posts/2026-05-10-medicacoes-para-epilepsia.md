@@ -15,7 +15,7 @@ O tratamento da epilepsia mudou muito nas últimas décadas. Hoje, temos várias
 
 Mas existe um ponto essencial: **não existe uma medicação "melhor para epilepsia" em todos os casos**.
 
-A escolha depende do tipo de crise, da síndrome epiléptica, da idade, do sexo, do risco de gestação, de outras doenças, de interações medicamentosas, do custo, da disponibilidade e da tolerabilidade individual.
+A escolha depende do tipo de crise, da síndrome epiléptica, da idade, do sexo, da possibilidade de gestação, de outras doenças, de interações medicamentosas, do custo, da disponibilidade e da tolerabilidade individual.
 
 Por isso, o objetivo deste artigo não é ensinar ninguém a escolher remédio sozinho. É ajudar você a entender os principais grupos de medicações, quais são seus usos mais comuns e quais cuidados merecem conversa cuidadosa com o neurologista.
 
@@ -29,7 +29,7 @@ De forma simplificada, as crises podem ser:
 - **Generalizadas:** envolvem redes cerebrais dos dois hemisférios desde o início. Incluem crises tônico-clônicas, ausências, mioclonias, crises tônicas e atônicas.
 - **De início desconhecido:** quando a história ou os exames ainda não permitem definir claramente a origem.
 
-Essa distinção muda tudo. Algumas medicações funcionam bem para crises focais, mas podem piorar certos tipos de epilepsia generalizada, especialmente crises de ausência ou mioclônicas.
+Essa distinção é muito importante. Algumas medicações funcionam bem para crises focais, mas podem piorar certos tipos de epilepsia generalizada, especialmente crises de ausência ou mioclônicas.
 
 > Em epilepsia, o remédio certo começa pelo diagnóstico certo.
 
@@ -76,7 +76,7 @@ A lamotrigina é uma opção importante em epilepsias focais e em algumas epilep
 
 - Boa tolerabilidade para muitos pacientes
 - Menor tendência a sedação em comparação com algumas medicações mais antigas
-- Pode ser útil em crises focais e tônico-clônicas generalizadas
+- Pode ser útil em crises focais e generalizadas
 - Perfil relevante em pacientes com comorbidade de humor
 
 ### Cuidados
