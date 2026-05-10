@@ -5,7 +5,7 @@ description: "Conheça as principais medicações usadas no tratamento da epilep
 date: 2026-05-10 09:00:00 -0300
 category: "Epilepsia"
 tags: [epilepsia, crise epiléptica, anticonvulsivantes, medicações anticrise, canabidiol, CBD, levetiracetam, lamotrigina, valproato, depakene, gardenal, neurologista Fortaleza]
-reading_time: 10
+reading_time: 15
 cover: /assets/img/posts/medicamentos-epi.webp
 image: /assets/img/posts/medicamentos-epi.webp
 author: "Dr. Brendow Mártin"
