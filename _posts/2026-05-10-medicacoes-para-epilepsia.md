@@ -6,8 +6,8 @@ date: 2026-05-10 09:00:00 -0300
 category: "Epilepsia"
 tags: [epilepsia, crise epiléptica, anticonvulsivantes, medicações anticrise, levetiracetam, lamotrigina, valproato, neurologista Fortaleza]
 reading_time: 9
-cover: /assets/img/posts/quando-procurar-neurologista.webp
-image: /assets/img/posts/quando-procurar-neurologista.webp
+cover: /assets/img/posts/medicamentos-epi.webp
+image: /assets/img/posts/medicamentos-epi.webp
 author: "Dr. Brendow Mártin"
 ---
 
