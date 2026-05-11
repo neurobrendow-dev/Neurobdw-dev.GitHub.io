@@ -905,7 +905,7 @@ window.MEDICATIONS = [
 
   /* =========================  CORTICOIDES  ========================= */
   { name: 'Prednisona', aliases: ['Meticorten'], presentations: [
-    '5 mg comprimido', '20 mg comprimido', '50 mg comprimido', '40 mg/mL solução oral'
+    '5 mg comprimido', '20 mg comprimido'
   ]},
   { name: 'Prednisolona', aliases: ['Predsim'], presentations: [
     '5 mg comprimido', '20 mg comprimido', '3 mg/mL solução oral'
@@ -948,7 +948,10 @@ window.MEDICATIONS = [
     '50.000 UI comprimido', '200 UI/gota solução oral'
   ]},
   { name: 'Vitamina B12 (cianocobalamina)', aliases: ['Cobavital'], presentations: [
-    '5.000 mcg/mL solução injetável', '500 mcg comprimido'
+    '5.000 mcg/mL solução injetável', '5000 mcg comprimido'
+  ]},
+  { name: 'Vitamina B12 (Mecobalamina)', aliases: ['Dozemast', 'Mecobe'], presentations: [
+    '1000 mcg comprimido sublingual'
   ]},
   { name: 'Ácido fólico', aliases: ['Endofolin', 'Folacin'], presentations: ['5 mg comprimido', '0,2 mg/mL solução oral'] },
   { name: 'Vitamina B1 (tiamina)', aliases: ['Benerva'], presentations: ['100 mg comprimido', '300 mg comprimido'] },
@@ -1392,7 +1395,7 @@ function medicationClassPosologies(med, presentation) {
   if (has(name, ['estradiol', 'tibolona', 'medroxiprogesterona'])) add('Usar conforme esquema hormonal individual e contraindicações.', `Tomar 1 ${unit} VO 1 vez ao dia, se apresentação oral.`);
 
   if (has(name, ['vitamina d3'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`, `Tomar 1 ${unit} VO 1 vez por semana, conforme dose prescrita.`);
-  if (has(name, ['vitamina b12', 'complexo b'])) add('Aplicar 1 ampola IM conforme esquema de reposição.', `Tomar 1 ${unit} VO 1 vez ao dia.`);
+  if (has(name, ['vitamina b12', 'complexo b'])) add('Aplicar 1 ampola IM conforme esquema de reposição.', `Tomar 1 ${unit} VO 1 vez ao dia.`, `Tomar 1 ${unit} sublingual 1 vez ao dia.`);
   if (has(name, ['acido folico', 'vitamina b1', 'vitamina b6', 'carbonato de calcio', 'sulfato ferroso', 'coenzima q10'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`, `Tomar 1 ${unit} VO de 12/12 horas, conforme necessidade de reposição.`);
 
   if (has(name, ['latanoprosta'])) add('Instilar 1 gota no(s) olho(s) acometido(s) à noite.');
