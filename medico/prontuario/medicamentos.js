@@ -196,7 +196,7 @@ window.MEDICATIONS = [
     '1 mg comprimido', '2 mg comprimido'
   ]},
   { name: 'Bromazepam', aliases: ['Lexotan', 'Somalium'], presentations: [
-    '3 mg comprimido', '6 mg comprimido'
+    '3 mg comprimido', '6 mg comprimido', '2,5mg/mL solução oral'
   ]},
   { name: 'Midazolam', aliases: ['Dormonid', 'Dormire'], presentations: [
     '7,5 mg comprimido revestido', '15 mg comprimido revestido', '2 mg/mL solução oral',
@@ -307,19 +307,19 @@ window.MEDICATIONS = [
 
   /* --- Demência (anticolinesterásicos / memantina) --- */
   { name: 'Donepezila', aliases: ['Eranz', 'Donila', 'Doneprion'], presentations: [
-    '5 mg comprimido revestido', '10 mg comprimido revestido', '23 mg comprimido revestido'
+    '5 mg comprimido revestido', '10 mg comprimido revestido'
   ]},
   { name: 'Rivastigmina', aliases: ['Exelon', 'Prometax'], presentations: [
     '1,5 mg cápsula', '3 mg cápsula', '4,5 mg cápsula', '6 mg cápsula',
-    '4,6 mg/24h adesivo transdérmico', '9,5 mg/24h adesivo transdérmico',
-    '13,3 mg/24h adesivo transdérmico', '2 mg/mL solução oral'
+    '4,6 mg/24h adesivo transdérmico 9mg', '9,5 mg/24h adesivo transdérmico 18mg',
+    '13,3 mg/24h adesivo transdérmico 27mg', '2 mg/mL solução oral'
   ]},
   { name: 'Galantamina', aliases: ['Reminyl ER'], presentations: [
     '8 mg cápsula de liberação prolongada', '16 mg cápsula de liberação prolongada',
-    '24 mg cápsula de liberação prolongada', '4 mg/mL solução oral'
+    '24 mg cápsula de liberação prolongada'
   ]},
   { name: 'Memantina', aliases: ['Ebix', 'Alois', 'Memora'], presentations: [
-    '10 mg comprimido revestido', '20 mg comprimido revestido'
+    '10 mg comprimido revestido', '20 mg comprimido revestido',  '05 mg comprimido ODT',  '10mg/ml Gotas', '20mg/ml Gotas'
   ]},
 
   /* --- Esclerose múltipla --- */
