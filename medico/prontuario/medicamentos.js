@@ -950,9 +950,7 @@ window.MEDICATIONS = [
   { name: 'Vitamina B12 (cianocobalamina)', aliases: ['Cobavital'], presentations: [
     '5.000 mcg/mL solução injetável', '5000 mcg comprimido'
   ]},
-  { name: 'Vitamina B12 (Mecobalamina)', aliases: ['Dozemast', 'Mecobe'], presentations: [
-    '1000 mcg comprimido sublingual'
-  ]},
+  { name: 'Vitamina B12 (Mecobalamina)', aliases: ['Dozemast', 'Mecobe'], presentations: ['1000 mcg comprimido sublingual']},
   { name: 'Ácido fólico', aliases: ['Endofolin', 'Folacin'], presentations: ['5 mg comprimido', '0,2 mg/mL solução oral'] },
   { name: 'Vitamina B1 (tiamina)', aliases: ['Benerva'], presentations: ['100 mg comprimido', '300 mg comprimido'] },
   { name: 'Vitamina B6 (piridoxina)', aliases: ['Vitabe'], presentations: ['50 mg comprimido'] },
