@@ -351,13 +351,13 @@ window.MEDICATIONS = [
 
   /* --- Espasticidade / relaxantes --- */
   { name: 'Baclofeno', aliases: ['Lioresal'], presentations: [
-    '10 mg comprimido', '20 mg comprimido', '0,5 mg/mL solução intratecal'
+    '10 mg comprimido'
   ]},
   { name: 'Tizanidina', aliases: ['Sirdalud'], presentations: [
-    '2 mg comprimido', '4 mg comprimido'
+    '2 mg comprimido'
   ]},
   { name: 'Ciclobenzaprina', aliases: ['Miosan', 'Mirtax', 'Benziflex'], presentations: [
-    '5 mg comprimido revestido', '10 mg comprimido revestido'
+    '5 mg comprimido revestido', '10 mg comprimido revestido', '15 mg cp liberação prolongada'
   ]},
   { name: 'Carisoprodol + paracetamol + cafeína + diclofenaco', aliases: ['Tandrilax', 'Mioflex-A', 'Torsilax'], presentations: [
     '125 + 300 + 30 + 50 mg comprimido revestido'
@@ -365,13 +365,12 @@ window.MEDICATIONS = [
 
   /* --- Vertigem / antieméticos / cinetose --- */
   { name: 'Betaistina', aliases: ['Labirin', 'Vertix'], presentations: [
-    '8 mg comprimido', '16 mg comprimido', '24 mg comprimido'
+    '8 mg comprimido', '16 mg comprimido', '24 mg comprimido', '32 mg comprimido XR', '48 mg comprimido XR'
   ]},
   { name: 'Dimenidrinato', aliases: ['Dramin', 'Dramin B6'], presentations: [
-    '50 mg comprimido', '100 mg comprimido', '25 mg/5 mL xarope',
-    '6,25 mg/mL gotas', '50 mg/mL solução injetável'
+    '50 mg comprimido', '25 mg comprimido', '25 mg/mL xarope'
   ]},
-  { name: 'Meclizina', aliases: ['Meclin'], presentations: ['25 mg comprimido'] },
+  { name: 'Meclizina', aliases: ['Meclin'], presentations: ['25 mg comprimido', '50mg comprimido'] },
   { name: 'Prometazina', aliases: ['Fenergan'], presentations: [
     '25 mg comprimido revestido', '25 mg/mL solução injetável (ampola 2 mL)'
   ]},
@@ -385,27 +384,27 @@ window.MEDICATIONS = [
     '5 mg/mL solução injetável (ampola 2 mL)'
   ]},
   { name: 'Bromoprida', aliases: ['Digesan', 'Plamet'], presentations: [
-    '10 mg cápsula', '5 mg/mL solução oral (gotas)',
+    '10 mg cápsula', '4 mg/mL solução oral (gotas)',
     '5 mg/mL solução injetável'
   ]},
 
   /* --- Outros neuro --- */
   { name: 'Riluzol', aliases: ['Rilutek'], presentations: ['50 mg comprimido revestido'] },
-  { name: 'Edaravona', aliases: ['Radicava'], presentations: ['30 mg/100 mL solução para infusão IV'] },
+  { name: 'Edaravona', aliases: ['Radicava'], presentations: ['30 mg/20 mL solução para infusão IV'] },
   { name: 'Tetrabenazina', aliases: ['Xenazine'], presentations: ['25 mg comprimido'] },
   { name: 'Piracetam', aliases: ['Nootropil'], presentations: [
-    '800 mg comprimido revestido', '200 mg/mL solução oral',
-    '200 mg/mL solução injetável (ampola 5 mL)'
+    '800 mg comprimido revestido', '400 mg comprimido revestido',
+    '300 mg/5mL solução oral'
   ]},
   { name: 'Citicolina', aliases: ['Somazina', 'Esevrel'], presentations: [
     '500 mg comprimido revestido', '500 mg/4 mL solução oral',
     '125 mg/mL solução oral', '500 mg/4 mL solução injetável'
   ]},
   { name: 'Ginkgo biloba', aliases: ['Tebonin', 'Tanakan', 'Equitam'], presentations: [
-    '40 mg comprimido revestido', '80 mg comprimido revestido', '120 mg comprimido revestido'
+    '80 mg comprimido revestido', '120 mg comprimido revestido'
   ]},
   { name: 'Vinpocetina', aliases: ['Cavinton', 'Vinpotrop'], presentations: [
-    '5 mg comprimido', '10 mg comprimido'
+    '5 mg comprimido'
   ]},
 
   /* =========================  CARDIOVASCULAR  ========================= */
