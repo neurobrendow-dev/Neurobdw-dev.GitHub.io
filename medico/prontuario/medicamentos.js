@@ -131,37 +131,35 @@ window.MEDICATIONS = [
 
   /* --- Antidepressivos --- */
   { name: 'Amitriptilina', aliases: ['Tryptanol', 'Amytril'], presentations: [
-    '25 mg comprimido revestido', '75 mg comprimido revestido'
+    '10 mg comprimido revestido', '25 mg comprimido revestido', '75 mg comprimido revestido'
   ]},
   { name: 'Nortriptilina', aliases: ['Pamelor'], presentations: [
-    '10 mg cápsula', '25 mg cápsula', '50 mg cápsula', '75 mg cápsula', '2 mg/mL solução oral'
+    '10 mg cápsula', '25 mg cápsula', '50 mg cápsula', '75 mg cápsula', '2 mg/mL solução oral (Pamelor)' 
   ]},
   { name: 'Imipramina', aliases: ['Tofranil'], presentations: [
-    '10 mg drágea', '25 mg drágea', '75 mg comprimido de liberação prolongada'
+     '25 mg drágea'
   ]},
   { name: 'Clomipramina', aliases: ['Anafranil'], presentations: [
     '10 mg drágea', '25 mg drágea', '75 mg comprimido de liberação prolongada'
   ]},
   { name: 'Sertralina', aliases: ['Zoloft', 'Tolrest', 'Sercerin'], presentations: [
-    '25 mg comprimido revestido', '50 mg comprimido revestido', '100 mg comprimido revestido',
-    '20 mg/mL solução oral'
+    '25 mg comprimido revestido', '50 mg comprimido revestido', '75 mg comprimido revestido', '100 mg comprimido revestido'
   ]},
   { name: 'Fluoxetina', aliases: ['Prozac', 'Daforin', 'Verotina', 'Eufor'], presentations: [
-    '10 mg cápsula', '20 mg cápsula', '20 mg comprimido dispersível', '20 mg/5 mL solução oral'
+    '10 mg cápsula', '20 mg cápsula', '20 mg comprimido dispersível', '20 mg/mL solução gotas'
   ]},
   { name: 'Paroxetina', aliases: ['Aropax', 'Pondera', 'Cebrilin', 'Roxetin'], presentations: [
-    '12,5 mg comprimido revestido CR', '20 mg comprimido revestido', '25 mg comprimido revestido CR'
+    '10 mg comprimido revestido', '12,5 mg comprimido revestido CR', '15 mg comprimido revestido', '20 mg comprimido revestido', '25 mg comprimido revestido CR'
   ]},
   { name: 'Citalopram', aliases: ['Cipramil', 'Citta', 'Procimax'], presentations: [
-    '20 mg comprimido revestido', '40 mg comprimido revestido', '20 mg/mL solução oral'
+    '20 mg comprimido revestido', '40 mg comprimido revestido'
   ]},
   { name: 'Escitalopram', aliases: ['Lexapro', 'Reconter', 'Esci'], presentations: [
     '5 mg comprimido revestido', '10 mg comprimido revestido', '15 mg comprimido revestido',
     '20 mg comprimido revestido', '20 mg/mL solução oral'
   ]},
   { name: 'Venlafaxina', aliases: ['Efexor XR', 'Venlift OD', 'Venlaxin'], presentations: [
-    '37,5 mg cápsula de liberação prolongada', '75 mg cápsula de liberação prolongada',
-    '150 mg cápsula de liberação prolongada', '225 mg cápsula de liberação prolongada'
+    '37,5 mg cápsula de liberação prolongada', '75 mg cápsula de liberação prolongada', '150 mg cápsula de liberação prolongada'
   ]},
   { name: 'Desvenlafaxina', aliases: ['Pristiq', 'Zinedif', 'Elifore'], presentations: [
     '50 mg comprimido de liberação prolongada', '100 mg comprimido de liberação prolongada'
@@ -174,13 +172,14 @@ window.MEDICATIONS = [
     '15 mg comprimido orodispersível', '30 mg comprimido orodispersível', '45 mg comprimido orodispersível'
   ]},
   { name: 'Trazodona', aliases: ['Donaren', 'Donaren retard'], presentations: [
-    '50 mg comprimido', '100 mg comprimido', '150 mg comprimido de liberação prolongada'
+    '50 mg comprimido', '100 mg comprimido', '150 mg comprimido de liberação prolongada',
+    '300 mg comprimido de liberação prolongada'
   ]},
   { name: 'Bupropiona', aliases: ['Wellbutrin XL', 'Bup', 'Zyban', 'Zetron'], presentations: [
     '150 mg comprimido de liberação prolongada', '300 mg comprimido de liberação prolongada'
   ]},
   { name: 'Vortioxetina', aliases: ['Brintellix'], presentations: [
-    '5 mg comprimido revestido', '10 mg comprimido revestido', '20 mg comprimido revestido'
+    '5 mg comprimido revestido', '10 mg comprimido revestido', '15 mg comprimido revestido', '20 mg comprimido revestido'
   ]},
   { name: 'Agomelatina', aliases: ['Valdoxan'], presentations: ['25 mg comprimido revestido'] },
 
