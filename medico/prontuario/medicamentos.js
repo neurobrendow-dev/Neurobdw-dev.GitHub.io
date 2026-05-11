@@ -117,10 +117,10 @@ window.MEDICATIONS = [
     '25 mg comprimido', '75 mg comprimido'
   ]},
   { name: 'Erenumabe', aliases: ['Pasurta'], presentations: [
-    '70 mg/mL solução injetável SC (caneta)', '140 mg/mL solução injetável SC (caneta)'
+    '70 mg/mL solução injetável SC (caneta)'
   ]},
   { name: 'Galcanezumabe', aliases: ['Emgality'], presentations: [
-    '120 mg/mL solução injetável SC (caneta)'
+    '120 mg/mL solução injetável SC (caneta)', '100 mg/mL solução injetável SC (caneta)'
   ]},
   { name: 'Fremanezumabe', aliases: ['Ajovy'], presentations: [
     '225 mg/1,5 mL solução injetável SC'
