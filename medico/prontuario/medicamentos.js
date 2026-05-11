@@ -516,7 +516,7 @@ window.MEDICATIONS = [
     '20 mg solução injetável (ampola 1 mL)'
   ]},
   { name: 'Doxazosina', aliases: ['Carduran XL'], presentations: [
-    '1 mg comprimido', '2 mg comprimido', '4 mg comprimido', '4 mg comprimido XL', '8 mg comprimido XL'
+    '1 mg comprimido', '2 mg comprimido', '4 mg comprimido', '4 mg comprimido XL'
   ]},
   { name: 'Prazosina', aliases: ['Minipress'], presentations: ['1 mg cápsula', '2 mg cápsula', '4 mg cápsula'] },
 
@@ -526,14 +526,14 @@ window.MEDICATIONS = [
     '81 mg comprimido tamponado', '100 mg comprimido revestido'
   ]},
   { name: 'Clopidogrel', aliases: ['Plavix', 'Iscover', 'Plagrel'], presentations: [
-    '75 mg comprimido revestido', '300 mg comprimido revestido'
+    '75 mg comprimido revestido'
   ]},
   { name: 'Ticagrelor', aliases: ['Brilinta'], presentations: [
-    '60 mg comprimido revestido', '90 mg comprimido revestido'
+    '90 mg comprimido revestido'
   ]},
-  { name: 'Prasugrel', aliases: ['Effient'], presentations: ['10 mg comprimido revestido'] },
+  { name: 'Prasugrel', aliases: ['Effient'], presentations: ['5 mg comprimido revestido', '10 mg comprimido revestido'] },
   { name: 'Varfarina', aliases: ['Marevan', 'Coumadin'], presentations: [
-    '1 mg comprimido', '2 mg comprimido', '2,5 mg comprimido', '5 mg comprimido'
+    '1 mg comprimido', '2,5 mg comprimido', '5 mg comprimido', '7,5 mg comprimido'
   ]},
   { name: 'Rivaroxabana', aliases: ['Xarelto'], presentations: [
     '10 mg comprimido revestido', '15 mg comprimido revestido', '20 mg comprimido revestido',
@@ -557,7 +557,7 @@ window.MEDICATIONS = [
   /* --- Hipolipemiantes --- */
   { name: 'Sinvastatina', aliases: ['Zocor', 'Sinvascor'], presentations: [
     '10 mg comprimido revestido', '20 mg comprimido revestido',
-    '40 mg comprimido revestido', '80 mg comprimido revestido'
+    '40 mg comprimido revestido'
   ]},
   { name: 'Atorvastatina', aliases: ['Citalor', 'Lipitor', 'Atorbest'], presentations: [
     '10 mg comprimido revestido', '20 mg comprimido revestido',
@@ -571,7 +571,7 @@ window.MEDICATIONS = [
     '10 mg comprimido', '20 mg comprimido', '40 mg comprimido'
   ]},
   { name: 'Pitavastatina', aliases: ['Livazo'], presentations: [
-    '1 mg comprimido', '2 mg comprimido', '4 mg comprimido'
+    '2 mg comprimido', '4 mg comprimido'
   ]},
   { name: 'Ezetimiba', aliases: ['Zetia', 'Ezetrol'], presentations: ['10 mg comprimido'] },
   { name: 'Ezetimiba + sinvastatina', aliases: ['Vytorin', 'Zintrepid'], presentations: [
@@ -579,10 +579,10 @@ window.MEDICATIONS = [
   ]},
   { name: 'Ciprofibrato', aliases: ['Lipless', 'Lipanon'], presentations: ['100 mg comprimido'] },
   { name: 'Fenofibrato', aliases: ['Lipidil', 'Trolip'], presentations: [
-    '160 mg comprimido revestido', '200 mg cápsula', '250 mg cápsula', '145 mg comprimido'
+    '160 mg comprimido revestido', '200 mg cápsula', '250 mg cápsula'
   ]},
   { name: 'Bezafibrato', aliases: ['Cedur retard'], presentations: ['200 mg comprimido', '400 mg retard'] },
-  { name: 'Gemfibrozila', aliases: ['Lopid'], presentations: ['600 mg comprimido', '900 mg comprimido'] },
+  { name: 'Gemfibrozila', aliases: ['Lopid'], presentations: ['300 mg comprimido', '600 mg comprimido', '900 mg comprimido'] },
   { name: 'Ácidos graxos ômega-3 (EPA + DHA)', aliases: ['Vitafor ômega', 'Naturetti ômega'], presentations: [
     '1000 mg cápsula gelatinosa', '1500 mg cápsula gelatinosa'
   ]},
