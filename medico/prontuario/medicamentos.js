@@ -20,10 +20,14 @@ window.MEDICATIONS = [
   /* =========================  NEUROLOGIA  ========================= */
 
   /* --- Antiepilépticos --- */
-  { name: 'Ácido valproico / (ou-especificar) Divalproato de sódio', aliases: ['Depakene', 'Depakote', 'Torval', 'Valpakine'], presentations: [
+  { name: 'Ácido valproico', aliases: ['Depakene', 'Valpakine', 'Torval'], presentations: [
     '250 mg cápsula', '250 mg comprimido', '500 mg comprimido revestido',
     '500 mg comprimido de liberação prolongada', '250 mg/5 mL xarope',
   ]},
+  { name: 'Divalproato de sódio', aliases: ['Depakote', 'Depakote ER'], presentations: [
+    '125 mg cápsula', '250 mg cápsula', '250 mg comprimido', '500 mg comprimido revestido',
+    '500 mg comprimido de liberação prolongada',
+  ]}, 
   { name: 'Brivaracetam', aliases: ['Briviact'], presentations: [
     '10 mg comprimido revestido', '25 mg comprimido revestido',
     '50 mg comprimido revestido', '75 mg comprimido revestido', '100 mg comprimido revestido',
@@ -32,7 +36,7 @@ window.MEDICATIONS = [
   { name: 'Carbamazepina', aliases: ['Tegretol', 'Tegretard', 'Tegrex'], presentations: [
     '200 mg comprimido', '400 mg comprimido',
     '200 mg comprimido CR (liberação controlada)', '400 mg comprimido CR',
-    '20 mg/mL suspensão oral', '100 mg/mL suspensão oral'
+    '20 mg/mL suspensão oral',
   ]},
   { name: 'Clobazam', aliases: ['Frisium', 'Urbanil'], presentations: [
     '10 mg comprimido', '20 mg comprimido'
@@ -45,12 +49,11 @@ window.MEDICATIONS = [
     '50mg/mL xarope', '50 mg/mL xarope'
   ]},
   { name: 'Fenitoína', aliases: ['Hidantal', 'Epelin', 'Fenital'], presentations: [
-    '100 mg comprimido', '50 mg/mL solução injetável (ampola 5 mL)',
+    '100 mg comprimido',
     '20 mg/mL suspensão oral'
   ]},
   { name: 'Fenobarbital', aliases: ['Gardenal', 'Edhanol'], presentations: [
-    '100 mg comprimido', '4 mg/mL gotas (40 mg/mL?)', '40 mg/mL elixir',
-    '100 mg/mL solução injetável (ampola 1 mL)', '200 mg/mL solução injetável'
+    '100 mg comprimido', '40 mg/mL Solução oral', '50 mg comprimido',
   ]},
   { name: 'Gabapentina', aliases: ['Neurontin', 'Progresse', 'Gamibetal'], presentations: [
     '300 mg cápsula', '400 mg cápsula', '600 mg comprimido revestido',
@@ -73,8 +76,7 @@ window.MEDICATIONS = [
     '300 mg comprimido revestido', '600 mg comprimido revestido', '60 mg/mL suspensão oral'
   ]},
   { name: 'Perampanel', aliases: ['Fycompa'], presentations: [
-    '2 mg comprimido revestido', '4 mg comprimido revestido',
-    '6 mg comprimido revestido', '8 mg comprimido revestido', '10 mg comprimido revestido', '12 mg comprimido revestido'
+    '2 mg comprimido revestido', '6 mg comprimido revestido',
   ]},
   { name: 'Pregabalina', aliases: ['Lyrica', 'Prebictal', 'Lyripar', 'Dorene'], presentations: [
     '25 mg cápsula', '35 mg cápsula', '50 mg cápsula', '75 mg cápsula',
@@ -96,15 +98,13 @@ window.MEDICATIONS = [
   /* --- Anti-enxaqueca / cefaleia --- */
   { name: 'Sumatriptano', aliases: ['Imigran', 'Sumax'], presentations: [
     '25 mg comprimido revestido', '50 mg comprimido revestido', '100 mg comprimido revestido',
-    '6 mg/0,5 mL solução injetável SC', '20 mg/dose spray nasal'
+    '6 mg/0,5 mL solução injetável SC', '10 mg/0,1ml spray nasal'
   ]},
   { name: 'Zolmitriptano', aliases: ['Zomig'], presentations: [
     '2,5 mg comprimido revestido', '2,5 mg comprimido orodispersível',
-    '5 mg comprimido orodispersível', '5 mg/dose spray nasal'
   ]},
   { name: 'Naratriptano', aliases: ['Naramig'], presentations: ['2,5 mg comprimido revestido'] },
   { name: 'Rizatriptano', aliases: ['Maxalt', 'Maxalt-MLT'], presentations: [
-    '5 mg comprimido orodispersível', '10 mg comprimido orodispersível',
     '10 mg comprimido revestido'
   ]},
   { name: 'Eletriptano', aliases: ['Relpax'], presentations: [
