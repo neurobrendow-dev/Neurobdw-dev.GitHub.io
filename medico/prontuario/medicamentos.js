@@ -226,13 +226,13 @@ window.MEDICATIONS = [
     '5 mg/mL solução injetável (ampola 1 mL)', '50 mg/mL decanoato injetável'
   ]},
   { name: 'Risperidona', aliases: ['Risperdal', 'Zargus', 'Riss', 'Respidon'], presentations: [
-    '1 mg comprimido revestido', '2 mg comprimido revestido', '3 mg comprimido revestido',
+    '0,5 mg comprimido revestido', '1 mg comprimido revestido', '2 mg comprimido revestido', '3 mg comprimido revestido',
     '1 mg/mL solução oral', '25 mg/2 mL injetável de liberação prolongada (Consta)'
   ]},
   { name: 'Quetiapina', aliases: ['Seroquel XRO', 'Quetros', 'Quetiapin', 'Q-pin'], presentations: [
-    '25 mg comprimido revestido', '100 mg comprimido revestido', '200 mg comprimido revestido',
-    '300 mg comprimido revestido',
-    '50 mg comprimido revestido XRO', '200 mg XRO', '300 mg XRO', '400 mg XRO'
+    '25 mg comprimido revestido', '50 mg comprimido revestido', '100 mg comprimido revestido', '200 mg comprimido revestido',
+    '300 mg comprimido revestido', '100 mg comprimido revestido', 'Quetipin SO 12,5mg Suspensão Oral', 'Quetipin SO 12,5mg Suspensão Oral', 
+    '50 mg comprimido revestido XRO', '200 mg XRO', '300 mg XRO'
   ]},
   { name: 'Olanzapina', aliases: ['Zyprexa', 'Zaldiar?', 'Olapine'], presentations: [
     '2,5 mg comprimido revestido', '5 mg comprimido revestido',
@@ -240,8 +240,7 @@ window.MEDICATIONS = [
   ]},
   { name: 'Aripiprazol', aliases: ['Abilify', 'Aristab', 'Arpilif'], presentations: [
     '10 mg comprimido', '15 mg comprimido', '20 mg comprimido', '30 mg comprimido',
-    '300 mg pó liofilizado para suspensão injetável (Maintena)',
-    '400 mg pó liofilizado para suspensão injetável (Maintena)'
+    '1mg/ml suspensão oral',  '20mg/ml suspensão gotas'
   ]},
   { name: 'Clozapina', aliases: ['Leponex'], presentations: [
     '25 mg comprimido', '100 mg comprimido'
@@ -256,7 +255,7 @@ window.MEDICATIONS = [
     '25 mg comprimido', '100 mg comprimido', '40 mg/mL gotas (4%)'
   ]},
   { name: 'Tioridazina', aliases: ['Melleril'], presentations: [
-    '25 mg comprimido', '50 mg comprimido', '100 mg comprimido'
+    '10 mg comprimido', '25 mg comprimido', '50 mg comprimido', '100 mg comprimido', '200 mg comprimido'
   ]},
   { name: 'Lurasidona', aliases: ['Latuda'], presentations: [
     '20 mg comprimido', '40 mg comprimido', '80 mg comprimido'
