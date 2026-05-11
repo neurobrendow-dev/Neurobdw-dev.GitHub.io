@@ -452,20 +452,18 @@ window.MEDICATIONS = [
     '2,5 mg comprimido', '5 mg comprimido', '10 mg comprimido'
   ]},
   { name: 'Nifedipino', aliases: ['Adalat Oros', 'Adalat Retard'], presentations: [
-    '20 mg comprimido retard', '30 mg comprimido OROS',
-    '60 mg comprimido OROS', '10 mg cápsula'
+    '20 mg comprimido retard', '40 mg comprimido OROS',
+    '10 mg cápsula'
   ]},
   { name: 'Lercanidipino', aliases: ['Zanidip'], presentations: [
     '10 mg comprimido revestido', '20 mg comprimido revestido'
   ]},
   { name: 'Manidipino', aliases: ['Manivasc'], presentations: ['10 mg comprimido', '20 mg comprimido'] },
   { name: 'Verapamil', aliases: ['Dilacoron', 'Verapamil retard'], presentations: [
-    '40 mg comprimido', '80 mg comprimido', '120 mg comprimido retard',
-    '240 mg comprimido retard', '5 mg/2 mL solução injetável'
+    '80 mg comprimido', '120 mg comprimido retard'
   ]},
   { name: 'Diltiazem', aliases: ['Cardizem', 'Cardizem CD', 'Cardizem SR', 'Balcor'], presentations: [
-    '60 mg comprimido', '90 mg comprimido CD',
-    '120 mg cápsula CD', '180 mg cápsula CD', '240 mg cápsula CD', '300 mg cápsula CD'
+    '60 mg comprimido', '30 mg comprimido '
   ]},
 
   /* --- Beta-bloqueadores --- */
@@ -476,9 +474,7 @@ window.MEDICATIONS = [
     '25 mg comprimido', '50 mg comprimido', '100 mg comprimido'
   ]},
   { name: 'Metoprolol', aliases: ['Seloken Zok', 'Selozok', 'Lopressor'], presentations: [
-    '25 mg comprimido', '50 mg comprimido', '100 mg comprimido',
-    '25 mg comprimido revestido Zok', '50 mg comprimido revestido Zok',
-    '100 mg comprimido revestido Zok'
+    '25 mg comprimido', '50 mg comprimido', '100 mg comprimido'
   ]},
   { name: 'Bisoprolol', aliases: ['Concor', 'Bicor'], presentations: [
     '1,25 mg comprimido', '2,5 mg comprimido',
@@ -488,7 +484,7 @@ window.MEDICATIONS = [
     '3,125 mg comprimido', '6,25 mg comprimido',
     '12,5 mg comprimido', '25 mg comprimido'
   ]},
-  { name: 'Nebivolol', aliases: ['Nebilet'], presentations: ['5 mg comprimido'] },
+  { name: 'Nebivolol', aliases: ['Nebilet'], presentations: ['5 mg comprimido', '2,5 mg comprimido' ] },
 
   /* --- Diuréticos --- */
   { name: 'Hidroclorotiazida', aliases: ['Clorana', 'Drenol'], presentations: [
