@@ -107,14 +107,14 @@ window.MEDICATIONS = [
   { name: 'Rizatriptano', aliases: ['Maxalt', 'Maxalt-MLT'], presentations: [
     '10 mg comprimido revestido'
   ]},
-  { name: 'Eletriptano', aliases: ['Relpax'], presentations: [
-    '20 mg comprimido revestido', '40 mg comprimido revestido'
+  { name: 'Eletriptano', aliases: ['Zeforus'], presentations: [
+    '20 mg comprimido revestido', '80 mg comprimido revestido'
   ]},
   { name: 'Flunarizina', aliases: ['Vertix', 'Sibelium', 'Fluxxon', 'Flunaril'], presentations: [
-    '10 mg cápsula', '5 mg comprimido', '10 mg comprimido'
+    '5 mg/ml solução', '10 mg comprimido'
   ]},
   { name: 'Cinarizina', aliases: ['Stugeron', 'Antigeron'], presentations: [
-    '25 mg comprimido', '75 mg comprimido', '75 mg cápsula de liberação prolongada'
+    '25 mg comprimido', '75 mg comprimido'
   ]},
   { name: 'Erenumabe', aliases: ['Pasurta'], presentations: [
     '70 mg/mL solução injetável SC (caneta)', '140 mg/mL solução injetável SC (caneta)'
