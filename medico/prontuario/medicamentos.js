@@ -100,7 +100,7 @@ window.MEDICATIONS = [
     '6 mg/0,5 mL solução injetável SC', '10 mg/0,1ml spray nasal'
   ]},
   { name: 'Zolmitriptano', aliases: ['Zomig'], presentations: [
-    '2,5 mg comprimido revestido', '2,5 mg comprimido orodispersível',
+    '2,5 mg comprimido revestido', '2,5 mg comprimido orodispersível'
   ]},
   { name: 'Naratriptano', aliases: ['Naramig'], presentations: ['2,5 mg comprimido revestido'] },
   { name: 'Rizatriptano', aliases: ['Maxalt', 'Maxalt-MLT'], presentations: [
