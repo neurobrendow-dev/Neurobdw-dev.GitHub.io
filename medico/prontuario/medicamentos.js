@@ -264,20 +264,17 @@ window.MEDICATIONS = [
   /* --- Anti-Parkinson e movimentos --- */
   { name: 'Levodopa + benserazida', aliases: ['Prolopa', 'Prolopa BD'], presentations: [
     '100/25 mg comprimido', '200/50 mg comprimido',
-    '100/25 mg comprimido dispersível (BD)', '100/25 mg cápsula HBS'
+    '100/25 mg comprimido dispersível', '100/25 mg cápsula HBS'
   ]},
   { name: 'Levodopa + carbidopa', aliases: ['Sinemet', 'Cronomet', 'Parkidopa'], presentations: [
-    '100/25 mg comprimido', '250/25 mg comprimido', '200/50 mg comprimido CR'
+    '250/25 mg comprimido', '200/50 mg comprimido'
   ]},
   { name: 'Levodopa + carbidopa + entacapona', aliases: ['Stalevo'], presentations: [
-    '50/12,5/200 mg comprimido revestido', '75/18,75/200 mg comprimido revestido',
-    '100/25/200 mg comprimido revestido', '125/31,25/200 mg comprimido revestido',
-    '150/37,5/200 mg comprimido revestido', '200/50/200 mg comprimido revestido'
+    '50/12,5/200 mg comprimido revestido', '100/25/200 mg comprimido revestido', '150/37,5/200 mg comprimido revestido'
   ]},
   { name: 'Pramipexol', aliases: ['Sifrol', 'Sifrol ER', 'Stadium'], presentations: [
     '0,125 mg comprimido', '0,25 mg comprimido', '1 mg comprimido',
-    '0,375 mg comprimido ER', '0,75 mg comprimido ER', '1,5 mg comprimido ER',
-    '3 mg comprimido ER', '4,5 mg comprimido ER'
+    '0,375 mg comprimido ER', '0,75 mg comprimido ER', '1,5 mg comprimido ER'
   ]},
   { name: 'Ropinirol', aliases: ['Requip XL'], presentations: [
     '0,25 mg comprimido', '1 mg comprimido', '2 mg comprimido',
@@ -304,7 +301,7 @@ window.MEDICATIONS = [
     '5 mg/1 mL solução injetável'
   ]},
   { name: 'Triexifenidil', aliases: ['Artane'], presentations: [
-    '5 mg comprimido'
+    '5 mg comprimido', '2 mg comprimido'
   ]},
   { name: 'Safinamida', aliases: ['Xadago'], presentations: ['50 mg comprimido', '100 mg comprimido'] },
 
