@@ -444,7 +444,7 @@ window.MEDICATIONS = [
     '8 mg comprimido', '16 mg comprimido', '32 mg comprimido'
   ]},
   { name: 'Irbesartana', aliases: ['Avapro'], presentations: [
-    '75 mg comprimido', '150 mg comprimido', '300 mg comprimido'
+    '150 mg comprimido', '300 mg comprimido'
   ]},
 
   /* --- BCC --- */
