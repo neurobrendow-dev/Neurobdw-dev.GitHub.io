@@ -323,9 +323,8 @@ window.MEDICATIONS = [
   ]},
 
   /* --- Esclerose múltipla --- */
-  { name: 'Interferona beta-1a', aliases: ['Avonex', 'Rebif'], presentations: [
-    '30 mcg solução injetável IM (Avonex)', '22 mcg/0,5 mL solução injetável SC (Rebif)',
-    '44 mcg/0,5 mL solução injetável SC (Rebif)'
+  { name: 'Betainterferona 1a', aliases: ['Avonex', 'Rebif'], presentations: [
+   '22 mcg/0,5 mL solução injetável SC (Rebif)', '44 mcg/0,5 mL solução injetável SC (Rebif)'
   ]},
   { name: 'Interferona beta-1b', aliases: ['Betaferon', 'Extavia'], presentations: [
     '0,3 mg pó liofilizado para solução injetável SC'
@@ -339,7 +338,7 @@ window.MEDICATIONS = [
   { name: 'Teriflunomida', aliases: ['Aubagio'], presentations: [
     '14 mg comprimido revestido'
   ]},
-  { name: 'Dimetilfumarato', aliases: ['Tecfidera'], presentations: [
+  { name: 'Fumarato de dimetila', aliases: ['Tecfidera'], presentations: [
     '120 mg cápsula gastrorresistente', '240 mg cápsula gastrorresistente'
   ]},
   { name: 'Natalizumabe', aliases: ['Tysabri'], presentations: [
@@ -1289,11 +1288,11 @@ function medicationClassPosologies(med, presentation) {
   }
   if (has(name, ['galantamina', 'memantina'])) add(`Tomar 1 ${unit} VO 1 vez ao dia, titular conforme bula.`, `Tomar 1 ${unit} VO de 12/12 horas, conforme apresentação e dose-alvo.`);
 
-  if (has(name, ['interferona beta-1a'])) add('Avonex: aplicar 30 mcg IM 1 vez por semana.', 'Rebif: aplicar por via SC 3 vezes por semana, conforme dose prescrita.');
+  if (has(name, ['Betainterferona 1a'])) add('Avonex: aplicar 30 mcg IM 1 vez por semana.', 'Rebif: aplicar por via SC 3 vezes por semana, conforme dose prescrita.');
   if (has(name, ['interferona beta-1b'])) add('Aplicar por via SC em dias alternados, conforme bula.');
   if (has(name, ['acetato de glatiramer'])) add('Aplicar 20 mg SC 1 vez ao dia.', 'Aplicar 40 mg SC 3 vezes por semana.');
   if (has(name, ['fingolimode', 'teriflunomida'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`);
-  if (has(name, ['dimetilfumarato'])) add(`Tomar 1 ${unit} VO de 12/12 horas, com alimento.`);
+  if (has(name, ['Fumarato de dimetila'])) add(`Tomar 1 ${unit} VO de 12/12 horas, com alimento, não abrir ou mastigar.`);
   if (has(name, ['natalizumabe'])) add('Infundir 300 mg IV a cada 4 semanas, em serviço habilitado.');
   if (has(name, ['ocrelizumabe'])) add('Infundir 300 mg IV no dia 1 e dia 15; depois 600 mg IV a cada 6 meses, conforme protocolo.');
   if (has(name, ['cladribina'])) add('Administrar VO em ciclos anuais conforme peso e protocolo específico.');
