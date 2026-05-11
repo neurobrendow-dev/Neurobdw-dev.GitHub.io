@@ -1395,7 +1395,7 @@ function medicationClassPosologies(med, presentation) {
   if (has(name, ['estradiol', 'tibolona', 'medroxiprogesterona'])) add('Usar conforme esquema hormonal individual e contraindicações.', `Tomar 1 ${unit} VO 1 vez ao dia, se apresentação oral.`);
 
   if (has(name, ['vitamina d3'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`, `Tomar 1 ${unit} VO 1 vez por semana, conforme dose prescrita.`);
-  if (has(name, ['vitamina b12', 'complexo b'])) add('Aplicar 1 ampola IM conforme esquema de reposição.', `Tomar 1 ${unit} VO 1 vez ao dia.`, `Tomar 1 ${unit} sublingual 1 vez ao dia.`);
+  if (has(name, ['vitamina b12', 'complexo b', 'Vitamina B12 (cianocobalamina)', 'Vitamina B12 (Mecobalamina)'])) add('Aplicar 1 ampola IM conforme esquema de reposição.', `Tomar 1 ${unit} VO 1 vez ao dia.`, `Tomar 1 ${unit} sublingual 1 vez ao dia.`);
   if (has(name, ['acido folico', 'vitamina b1', 'vitamina b6', 'carbonato de calcio', 'sulfato ferroso', 'coenzima q10'])) add(`Tomar 1 ${unit} VO 1 vez ao dia.`, `Tomar 1 ${unit} VO de 12/12 horas, conforme necessidade de reposição.`);
 
   if (has(name, ['latanoprosta'])) add('Instilar 1 gota no(s) olho(s) acometido(s) à noite.');
