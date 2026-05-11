@@ -1,4 +1,4 @@
- /* ===========================================================
+/* ===========================================================
    MEDICAMENTOS — base ampla focada em uso brasileiro.
    Cada item: { name (princípio ativo), aliases (marcas/sinônimos),
                 presentations (lista textual de apresentações) }
