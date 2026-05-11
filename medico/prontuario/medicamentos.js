@@ -49,14 +49,13 @@ window.MEDICATIONS = [
     '50mg/mL xarope', '50 mg/mL xarope'
   ]},
   { name: 'Fenitoína', aliases: ['Hidantal', 'Epelin', 'Fenital'], presentations: [
-    '100 mg comprimido',
-    '20 mg/mL suspensão oral'
+    '100 mg comprimido'
   ]},
   { name: 'Fenobarbital', aliases: ['Gardenal', 'Edhanol'], presentations: [
-    '100 mg comprimido', '40 mg/mL Solução oral', '50 mg comprimido',
+    '100 mg comprimido', '40 mg/mL Solução oral', '50 mg comprimido'
   ]},
   { name: 'Gabapentina', aliases: ['Neurontin', 'Progresse', 'Gamibetal'], presentations: [
-    '300 mg cápsula', '400 mg cápsula', '600 mg comprimido revestido',
+    '300 mg cápsula', '400 mg cápsula', '600 mg comprimido revestido'
   ]},
   { name: 'Lacosamida', aliases: ['Vimpat'], presentations: [
     '50 mg comprimido revestido', '100 mg comprimido revestido',
@@ -70,7 +69,7 @@ window.MEDICATIONS = [
   { name: 'Levetiracetam', aliases: ['Keppra', 'Letiram'], presentations: [
     '250 mg comprimido revestido', '500 mg comprimido revestido',
     '750 mg comprimido revestido', '1000 mg comprimido revestido',
-    '100 mg/mL solução oral', '100 mg/mL solução injetável'
+    '100 mg/mL solução oral'
   ]},
   { name: 'Oxcarbazepina', aliases: ['Trileptal', 'Oxcarb'], presentations: [
     '300 mg comprimido revestido', '600 mg comprimido revestido', '60 mg/mL suspensão oral'
