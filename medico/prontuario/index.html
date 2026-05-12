@@ -534,6 +534,126 @@ function getAllExamGroups() {
   return [...builtin, ...custom];
 }
 
+/* --- Convênios (localStorage) --- */
+function loadHealthPlans() {
+  try { return JSON.parse(localStorage.getItem('emr_health_plans') || '[]'); } catch { return []; }
+}
+function saveHealthPlans(plans) {
+  localStorage.setItem('emr_health_plans', JSON.stringify(plans));
+}
+function buildHealthPlanOptions(currentValue) {
+  const plans = loadHealthPlans();
+  let html = '<option value="">— Particular / Nenhum —</option>';
+  plans.forEach(hp => {
+    html += `<option value="${escapeHtml(hp.name)}" ${currentValue === hp.name ? 'selected' : ''}>${escapeHtml(hp.name)}</option>`;
+  });
+  if (currentValue && !plans.find(hp => hp.name === currentValue)) {
+    html += `<option value="${escapeHtml(currentValue)}" selected>${escapeHtml(currentValue)}</option>`;
+  }
+  return html;
+}
+function getPatientPlan() {
+  if (!currentPatient?.health_plan) return null;
+  return loadHealthPlans().find(hp => hp.name === currentPatient.health_plan) || null;
+}
+function docAddress() { return getPatientPlan()?.address || DOCTOR_ADDRESS; }
+function docCity()    { return getPatientPlan()?.city    || DOCTOR_CITY; }
+
+function openManageHealthPlans(onChanged) {
+  const render = () => {
+    const plans = loadHealthPlans();
+    if (!plans.length) return '<div class="empty-state">Nenhum convênio cadastrado ainda.</div>';
+    return plans.map((hp, i) => `
+      <div class="doc-row" data-i="${i}" style="grid-template-columns:1fr auto auto auto;">
+        <div>
+          <strong>${escapeHtml(hp.name)}</strong>
+          <div style="font-size:0.78rem;color:#7a8a9c;">${escapeHtml(hp.address || '')}${hp.city ? ' — ' + escapeHtml(hp.city) : ''}</div>
+        </div>
+        <button class="btn-ghost" data-act="edit">Editar</button>
+        <button class="btn-ghost" data-act="del" style="color:var(--danger)">Excluir</button>
+      </div>`).join('');
+  };
+
+  const openPlanForm = (existing, idx) => {
+    openModal({
+      title: existing ? 'Editar convênio' : 'Novo convênio',
+      size: 'md',
+      bodyHTML: `
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nome do convênio *</label>
+            <input id="hp-name" value="${escapeHtml(existing?.name || '')}" placeholder="ex: Unimed, SUS, Hapvida">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Endereço do local de atendimento</label>
+            <input id="hp-address" value="${escapeHtml(existing?.address || '')}" placeholder="ex: Rua Senador Pompeu, 834, Sala 415">
+            <span class="form-hint">Usado na identificação do emitente na receita especial.</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Cidade</label>
+            <input id="hp-city" value="${escapeHtml(existing?.city || '')}" placeholder="ex: Fortaleza - CE">
+            <span class="form-hint">Aparece no rodapé de receitas simples, atestados, relatórios e laudos.</span>
+          </div>
+        </div>`,
+      footHTML: `<div style="flex:1"></div>
+        <button class="btn-secondary" data-close>Cancelar</button>
+        <button class="btn-primary" id="hp-save">Salvar</button>`,
+      onMount: (m) => {
+        m.querySelector('#hp-save').onclick = () => {
+          const name = m.querySelector('#hp-name').value.trim();
+          if (!name) { alert('Digite o nome do convênio.'); return; }
+          const address = m.querySelector('#hp-address').value.trim();
+          const city    = m.querySelector('#hp-city').value.trim();
+          const plans = loadHealthPlans();
+          if (existing !== null && idx >= 0) {
+            plans[idx] = { name, address, city };
+          } else {
+            plans.push({ name, address, city });
+          }
+          saveHealthPlans(plans);
+          closeModal();
+          if (onChanged) onChanged();
+        };
+      }
+    });
+  };
+
+  openModal({
+    title: 'Gerenciar convênios',
+    size: 'md',
+    bodyHTML: `<div id="hp-list">${render()}</div>`,
+    footHTML: `
+      <button class="btn-secondary" id="hp-new">+ Novo convênio</button>
+      <div style="flex:1"></div>
+      <button class="btn-secondary" data-close>Fechar</button>`,
+    onMount: (m) => {
+      const wire = () => {
+        m.querySelectorAll('#hp-list .doc-row').forEach(row => {
+          const i = +row.dataset.i;
+          const plans = loadHealthPlans();
+          row.querySelector('[data-act="edit"]').onclick = () => {
+            openPlanForm(plans[i], i);
+          };
+          row.querySelector('[data-act="del"]').onclick = () => {
+            if (!confirm(`Excluir o convênio "${plans[i].name}"?`)) return;
+            plans.splice(i, 1);
+            saveHealthPlans(plans);
+            m.querySelector('#hp-list').innerHTML = render();
+            wire();
+            if (onChanged) onChanged();
+          };
+        });
+      };
+      wire();
+      m.querySelector('#hp-new').onclick = () => openPlanForm(null, -1);
+    }
+  });
+}
+
 async function loadCustomExamGroups() {
   const { data, error } = await sb
     .from('emr_exam_groups')
@@ -623,6 +743,16 @@ function age(birth) {
 function todayBR() {
   return new Date().toLocaleDateString('pt-BR', { day:'2-digit', month:'long', year:'numeric' });
 }
+function toTitleCase(str) {
+  if (!str) return str;
+  const minors = new Set(['de','da','do','das','dos','e','a','o','as','os','em','na','no','nas','nos','por','para','com','sem','sob','até','von','van','der']);
+  return str.trim().replace(/\S+/g, (word, offset) => {
+    const lower = word.toLowerCase();
+    if (offset !== 0 && minors.has(lower)) return lower;
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  });
+}
+
 function numberToWords(n) {
   // simples (0–99) — suficiente p/ dias de afastamento e quantidades
   const u = ['zero','um','dois','três','quatro','cinco','seis','sete','oito','nove','dez',
@@ -842,7 +972,22 @@ function openPatientForm(patient) {
           </div>
           <div class="form-group">
             <label>Convênio</label>
-            <input name="health_plan" value="${escapeHtml(p.health_plan || '')}">
+            <div style="display:flex;gap:6px;">
+              <select name="health_plan" id="hp-sel" style="flex:1;">
+                ${buildHealthPlanOptions(p.health_plan || '')}
+              </select>
+              <button type="button" id="btn-manage-hp" class="btn-ghost" style="white-space:nowrap;padding:6px 10px;">Gerenciar</button>
+            </div>
+          </div>
+        </div>
+        <div class="form-row cols-2">
+          <div class="form-group">
+            <label>Acompanhante</label>
+            <input name="companion_name" value="${escapeHtml(p.companion_name || '')}" placeholder="Nome do familiar / responsável que acompanha">
+          </div>
+          <div class="form-group">
+            <label>Vínculo do acompanhante</label>
+            <input name="companion_relation" value="${escapeHtml(p.companion_relation || '')}" placeholder="ex: filho(a), cônjuge, mãe">
           </div>
         </div>
         <div class="form-row">
@@ -860,13 +1005,29 @@ function openPatientForm(patient) {
       <button class="btn-primary" id="btn-save-patient">${isNew ? 'Cadastrar' : 'Salvar'}</button>
     `,
     onMount: (modal) => {
+      const nameInput = modal.querySelector('[name="full_name"]');
+      if (nameInput) {
+        nameInput.addEventListener('blur', () => {
+          nameInput.value = toTitleCase(nameInput.value);
+        });
+      }
+      const btnManageHp = modal.querySelector('#btn-manage-hp');
+      if (btnManageHp) {
+        btnManageHp.onclick = () => {
+          openManageHealthPlans(() => {
+            const sel = modal.querySelector('#hp-sel');
+            if (sel) sel.innerHTML = buildHealthPlanOptions(sel.value);
+          });
+        };
+      }
       modal.querySelector('#btn-save-patient').onclick = async () => {
         const f = modal.querySelector('#form-patient');
         if (!f.reportValidity()) return;
         const fd = new FormData(f);
         const payload = {};
         for (const [k, v] of fd.entries()) {
-          payload[k] = v.trim() === '' ? null : v.trim();
+          if (k === 'full_name') payload[k] = toTitleCase(v) || null;
+          else payload[k] = v.trim() === '' ? null : v.trim();
         }
         try {
           if (isNew) {
@@ -956,6 +1117,10 @@ function renderSummary() {
       <div class="form-group"><label>Profissão</label><div>${escapeHtml(p.occupation || '—')}</div></div>
     </div>
     ${p.health_plan ? `<div class="form-group" style="margin-bottom:18px;"><label>Convênio</label><div>${escapeHtml(p.health_plan)}</div></div>` : ''}
+    ${(p.companion_name) ? `<div class="form-row cols-2" style="margin-bottom:18px;">
+      <div class="form-group"><label>Acompanhante</label><div>${escapeHtml(p.companion_name)}</div></div>
+      ${p.companion_relation ? `<div class="form-group"><label>Vínculo</label><div>${escapeHtml(p.companion_relation)}</div></div>` : ''}
+    </div>` : ''}
     ${p.notes ? `<div class="form-group" style="margin-bottom:18px;"><label>Observações</label><div>${escapeHtml(p.notes).replace(/\n/g,'<br>')}</div></div>` : ''}
 
     <h4 class="section-title">Resumo do histórico</h4>
@@ -1110,10 +1275,22 @@ function openConsultForm(c) {
   };
   let cidCodes = [...(data.cid_codes || [])];
 
+  const patientBanner = (() => {
+    if (!currentPatient) return '';
+    const parts = [currentPatient.full_name];
+    const a = age(currentPatient.birth_date);
+    if (a != null) parts.push(`${a} anos`);
+    if (currentPatient.sex) parts.push({ F: 'Feminino', M: 'Masculino', O: 'Outro' }[currentPatient.sex]);
+    if (currentPatient.health_plan) parts.push(currentPatient.health_plan);
+    return `<div style="background:#eef2f7;border-left:3px solid var(--gold);padding:10px 14px;margin-bottom:16px;font-size:0.88rem;color:var(--steel);">
+      <strong style="color:var(--navy);">${escapeHtml(parts[0])}</strong>${parts.slice(1).map(p => ` · ${escapeHtml(p)}`).join('')}
+    </div>`;
+  })();
+
   openModal({
     title: isNew ? 'Nova consulta' : 'Editar consulta',
     size: 'lg',
-    bodyHTML: `
+    bodyHTML: patientBanner + `
       <form id="form-consult">
         <div class="form-row cols-3">
           <div class="form-group">
@@ -2225,6 +2402,7 @@ function medEditorHTML(m, i) {
   // datalists próprios deste editor
   const presId = `med-pres-${Math.random().toString(36).slice(2, 9)}`;
   const posId = `med-pos-${Math.random().toString(36).slice(2, 9)}`;
+  const qtyId = `med-qty-${Math.random().toString(36).slice(2, 9)}`;
   return `
     <div class="med-editor">
       <div class="form-row cols-2">
@@ -2248,7 +2426,33 @@ function medEditorHTML(m, i) {
         </div>
         <div class="form-group">
           <label>Quantidade</label>
-          <input data-f="quantity" value="${escapeHtml(m.quantity || '')}" placeholder="ex: 10 comprimidos">
+          <input data-f="quantity" value="${escapeHtml(m.quantity || '')}" placeholder="ex: 10 comprimidos" list="${qtyId}">
+          <datalist id="${qtyId}">
+            <option value="uso contínuo"></option>
+            <option value="1 comprimido"></option>
+            <option value="2 comprimidos"></option>
+            <option value="7 comprimidos"></option>
+            <option value="10 comprimidos"></option>
+            <option value="14 comprimidos"></option>
+            <option value="20 comprimidos"></option>
+            <option value="28 comprimidos"></option>
+            <option value="30 comprimidos"></option>
+            <option value="60 comprimidos"></option>
+            <option value="90 comprimidos"></option>
+            <option value="1 caixa"></option>
+            <option value="2 caixas"></option>
+            <option value="3 caixas"></option>
+            <option value="4 caixas"></option>
+            <option value="6 caixas"></option>
+            <option value="1 ampola"></option>
+            <option value="2 ampolas"></option>
+            <option value="5 ampolas"></option>
+            <option value="10 ampolas"></option>
+            <option value="1 frasco"></option>
+            <option value="2 frascos"></option>
+            <option value="1 tubo"></option>
+            <option value="2 tubos"></option>
+          </datalist>
         </div>
       </div>
       <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:#5a6f85;margin:2px 0 8px;cursor:pointer;">
@@ -2450,7 +2654,7 @@ function pdfHeader(doc, label) {
   doc.setTextColor(200, 216, 232);
   doc.text(`${DOCTOR_TITLE} · ${DOCTOR_CRM}${DOCTOR_RQE ? ' · ' + DOCTOR_RQE : ''}`, M, 27);
   doc.setFontSize(8);
-  doc.text(DOCTOR_CITY, W - M, 11, { align: 'right' });
+  doc.text(docCity(), W - M, 11, { align: 'right' });
   doc.text(DOCTOR_EMAIL, W - M, 16, { align: 'right' });
   doc.text(DOCTOR_SITE, W - M, 21, { align: 'right' });
   doc.setTextColor(13, 27, 42);
@@ -2497,7 +2701,7 @@ function pdfFooter(doc) {
     doc.setTextColor(80, 95, 115);
     doc.text(`${DOCTOR_TITLE} — ${DOCTOR_CRM}${DOCTOR_RQE ? ' / ' + DOCTOR_RQE : ''}`, W / 2, 278, { align: 'center' });
     doc.setTextColor(138, 155, 176);
-    doc.text(`${DOCTOR_CITY}, ${todayBR()}  ·  Página ${i}/${pages}`, W / 2, 290, { align: 'center' });
+    doc.text(`${docCity()}, ${todayBR()}  ·  Página ${i}/${pages}`, W / 2, 290, { align: 'center' });
   }
 }
 
@@ -2815,9 +3019,9 @@ function drawReceitaEspecialVia(doc, xOff, d, c, pageNote = '') {
   let yy = y + 11;
   drawField('Nome:',        DOCTOR_LEGAL_NAME,                       xLeft, yy, 13); yy += 5.5;
   drawField('CRM:',         `${DOCTOR_CRM_NUMBER} ${DOCTOR_CRM_UF}`, xLeft, yy, 12); yy += 5.5;
-  drawField('Endereço:',    DOCTOR_ADDRESS,                          xLeft, yy, 18); yy += 5.5;
+  drawField('Endereço:',    docAddress(),                            xLeft, yy, 18); yy += 5.5;
   drawField('Telefone:',    DOCTOR_PHONE,                            xLeft, yy, 16); yy += 5.5;
-  drawField('Cidade e UF:', DOCTOR_CITY,                             xLeft, yy, 22);
+  drawField('Cidade e UF:', docCity(),                               xLeft, yy, 22);
 
   // campos do CONTROLE ESPECIAL: data + via1/via2 + linha de assinatura DENTRO
   yy = y + 11;
@@ -2944,7 +3148,7 @@ function drawReceitaEspecialVia(doc, xOff, d, c, pageNote = '') {
   // ----- 6) RODAPÉ (cidade / e-mail) -----
   doc.setFont('helvetica','italic'); doc.setFontSize(8);
   doc.setTextColor(140, 150, 165);
-  doc.text(DOCTOR_CITY,                xRightLimit, PAGE_H - 7,   { align: 'right' });
+  doc.text(docCity(),                  xRightLimit, PAGE_H - 7,   { align: 'right' });
   doc.text(`Email: ${DOCTOR_EMAIL}`,   xRightLimit, PAGE_H - 3.5, { align: 'right' });
   doc.setTextColor(13, 27, 42);
 }
@@ -3080,24 +3284,22 @@ function pdfExames(d, label) {
       y += 1;
     });
 
-    if (groupIndex === printableGroups.length - 1) {
-      if (c.indication) {
-        y += 4;
-        if (y > 255) newPage();
-        doc.setFont('helvetica','bold'); doc.setFontSize(10);
-        doc.text('Indicação clínica', M, y); y += 4;
-        doc.setDrawColor(184,154,94); doc.line(M, y, M + 40, y); y += 4;
-        doc.setFont('helvetica','normal');
-        writeWrapped(c.indication, M, W - 2*M);
-      }
-      if (c.cid) {
-        y += 4;
-        if (y > 255) newPage();
-        doc.setFont('helvetica','bold'); doc.setFontSize(10);
-        doc.text(`CID-10: `, M, y);
-        doc.setFont('helvetica','normal');
-        doc.text(c.cid, M + 18, y);
-      }
+    if (c.indication) {
+      y += 4;
+      if (y > 255) newPage();
+      doc.setFont('helvetica','bold'); doc.setFontSize(10);
+      doc.text('Indicação clínica', M, y); y += 4;
+      doc.setDrawColor(184,154,94); doc.line(M, y, M + 40, y); y += 4;
+      doc.setFont('helvetica','normal');
+      writeWrapped(c.indication, M, W - 2*M);
+    }
+    if (c.cid) {
+      y += 4;
+      if (y > 255) newPage();
+      doc.setFont('helvetica','bold'); doc.setFontSize(10);
+      doc.text(`CID-10: `, M, y);
+      doc.setFont('helvetica','normal');
+      doc.text(c.cid, M + 18, y);
     }
   });
 
