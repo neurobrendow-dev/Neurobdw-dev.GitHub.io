@@ -525,6 +525,7 @@ let currentHistory = null;
 let currentConsults = [];
 let currentDocs = [];
 let customExamGroups = [];   // grupos salvos pelo médico (Supabase)
+let healthPlans      = [];   // convênios salvos (Supabase)
 
 function getAllExamGroups() {
   const builtin = (window.EXAM_GROUPS || []).map(g => ({ ...g, custom: false }));
@@ -534,27 +535,33 @@ function getAllExamGroups() {
   return [...builtin, ...custom];
 }
 
-/* --- Convênios (localStorage) --- */
-function loadHealthPlans() {
-  try { return JSON.parse(localStorage.getItem('emr_health_plans') || '[]'); } catch { return []; }
+/* --- Convênios (Supabase) --- */
+async function loadHealthPlansDB() {
+  const { data, error } = await sb
+    .from('emr_health_plans')
+    .select('*')
+    .order('name', { ascending: true });
+  if (error) {
+    console.warn('emr_health_plans indisponível — execute a migration SQL:', error.message);
+    healthPlans = [];
+    return;
+  }
+  healthPlans = data || [];
 }
-function saveHealthPlans(plans) {
-  localStorage.setItem('emr_health_plans', JSON.stringify(plans));
-}
+
 function buildHealthPlanOptions(currentValue) {
-  const plans = loadHealthPlans();
   let html = '<option value="">— Particular / Nenhum —</option>';
-  plans.forEach(hp => {
+  healthPlans.forEach(hp => {
     html += `<option value="${escapeHtml(hp.name)}" ${currentValue === hp.name ? 'selected' : ''}>${escapeHtml(hp.name)}</option>`;
   });
-  if (currentValue && !plans.find(hp => hp.name === currentValue)) {
+  if (currentValue && !healthPlans.find(hp => hp.name === currentValue)) {
     html += `<option value="${escapeHtml(currentValue)}" selected>${escapeHtml(currentValue)}</option>`;
   }
   return html;
 }
 function getPatientPlan() {
   if (!currentPatient?.health_plan) return null;
-  return loadHealthPlans().find(hp => hp.name === currentPatient.health_plan) || null;
+  return healthPlans.find(hp => hp.name === currentPatient.health_plan) || null;
 }
 function docAddress() { return getPatientPlan()?.address || DOCTOR_ADDRESS; }
 function docCity()    { return getPatientPlan()?.city    || DOCTOR_CITY; }
@@ -562,68 +569,84 @@ function docPhone()   { return getPatientPlan()?.phone   || DOCTOR_PHONE; }
 
 function openManageHealthPlans(onChanged) {
   const render = () => {
-    const plans = loadHealthPlans();
-    if (!plans.length) return '<div class="empty-state">Nenhum convênio cadastrado ainda.</div>';
-    return plans.map((hp, i) => `
-      <div class="doc-row" data-i="${i}" style="grid-template-columns:1fr auto auto auto;">
+    if (!healthPlans.length) return '<div class="empty-state">Nenhum convênio cadastrado ainda.</div>';
+    return healthPlans.map(hp => `
+      <div class="doc-row" data-id="${escapeHtml(hp.id)}" style="grid-template-columns:1fr auto auto;">
         <div>
           <strong>${escapeHtml(hp.name)}</strong>
-          <div style="font-size:0.78rem;color:#7a8a9c;">${escapeHtml(hp.address || '')}${hp.city ? ' — ' + escapeHtml(hp.city) : ''}</div>
+          <div style="font-size:0.78rem;color:#7a8a9c;">
+            ${escapeHtml(hp.address || '')}${hp.city ? ' — ' + escapeHtml(hp.city) : ''}${hp.phone ? ' · ' + escapeHtml(hp.phone) : ''}
+          </div>
         </div>
         <button class="btn-ghost" data-act="edit">Editar</button>
         <button class="btn-ghost" data-act="del" style="color:var(--danger)">Excluir</button>
       </div>`).join('');
   };
 
-  const openPlanForm = (existing, idx) => {
+  const planFormHTML = (hp) => `
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nome do convênio *</label>
+        <input id="hp-name" value="${escapeHtml(hp?.name || '')}" placeholder="ex: Unimed, SUS, Hapvida">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Endereço do local de atendimento</label>
+        <input id="hp-address" value="${escapeHtml(hp?.address || '')}" placeholder="ex: Rua Senador Pompeu, 834, Sala 415">
+        <span class="form-hint">Usado na identificação do emitente na receita especial.</span>
+      </div>
+    </div>
+    <div class="form-row cols-2">
+      <div class="form-group">
+        <label>Cidade</label>
+        <input id="hp-city" value="${escapeHtml(hp?.city || '')}" placeholder="ex: Fortaleza - CE">
+        <span class="form-hint">Aparece no rodapé de receitas, atestados, relatórios e laudos.</span>
+      </div>
+      <div class="form-group">
+        <label>Telefone</label>
+        <input id="hp-phone" value="${escapeHtml(hp?.phone || '')}" placeholder="ex: (85) 3333-4444">
+        <span class="form-hint">Substitui o telefone do médico nos documentos.</span>
+      </div>
+    </div>`;
+
+  const openPlanForm = (existing, afterSave) => {
     openModal({
       title: existing ? 'Editar convênio' : 'Novo convênio',
       size: 'md',
-      bodyHTML: `
-        <div class="form-row">
-          <div class="form-group">
-            <label>Nome do convênio *</label>
-            <input id="hp-name" value="${escapeHtml(existing?.name || '')}" placeholder="ex: Unimed, SUS, Hapvida">
-          </div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Endereço do local de atendimento</label>
-            <input id="hp-address" value="${escapeHtml(existing?.address || '')}" placeholder="ex: Rua Senador Pompeu, 834, Sala 415">
-            <span class="form-hint">Usado na identificação do emitente na receita especial.</span>
-          </div>
-        </div>
-        <div class="form-row cols-2">
-          <div class="form-group">
-            <label>Cidade</label>
-            <input id="hp-city" value="${escapeHtml(existing?.city || '')}" placeholder="ex: Fortaleza - CE">
-            <span class="form-hint">Aparece no rodapé de receitas, atestados, relatórios e laudos.</span>
-          </div>
-          <div class="form-group">
-            <label>Telefone</label>
-            <input id="hp-phone" value="${escapeHtml(existing?.phone || '')}" placeholder="ex: (85) 3333-4444">
-            <span class="form-hint">Substitui o telefone do médico nos documentos.</span>
-          </div>
-        </div>`,
+      bodyHTML: planFormHTML(existing),
       footHTML: `<div style="flex:1"></div>
         <button class="btn-secondary" data-close>Cancelar</button>
         <button class="btn-primary" id="hp-save">Salvar</button>`,
-      onMount: (m) => {
-        m.querySelector('#hp-save').onclick = () => {
-          const name = m.querySelector('#hp-name').value.trim();
+      onMount: (fm) => {
+        fm.querySelector('#hp-save').onclick = async () => {
+          const name    = fm.querySelector('#hp-name').value.trim();
           if (!name) { alert('Digite o nome do convênio.'); return; }
-          const address = m.querySelector('#hp-address').value.trim();
-          const city    = m.querySelector('#hp-city').value.trim();
-          const phone   = m.querySelector('#hp-phone').value.trim();
-          const plans = loadHealthPlans();
-          if (existing !== null && idx >= 0) {
-            plans[idx] = { name, address, city, phone };
-          } else {
-            plans.push({ name, address, city, phone });
-          }
-          saveHealthPlans(plans);
-          closeModal();
-          if (onChanged) onChanged();
+          const address = fm.querySelector('#hp-address').value.trim();
+          const city    = fm.querySelector('#hp-city').value.trim();
+          const phone   = fm.querySelector('#hp-phone').value.trim();
+          const btn = fm.querySelector('#hp-save');
+          btn.disabled = true; btn.textContent = 'Salvando…';
+          try {
+            if (existing) {
+              const { data, error } = await sb.from('emr_health_plans')
+                .update({ name, address, city, phone })
+                .eq('id', existing.id).select().single();
+              if (error) throw error;
+              const idx = healthPlans.findIndex(x => x.id === existing.id);
+              if (idx >= 0) healthPlans[idx] = data;
+            } else {
+              const { data, error } = await sb.from('emr_health_plans')
+                .insert({ name, address, city, phone, created_by: currentUser.id })
+                .select().single();
+              if (error) throw error;
+              healthPlans.push(data);
+            }
+            healthPlans.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+            closeModal();
+            if (afterSave) afterSave();
+            if (onChanged) onChanged();
+          } catch (err) { alertErr(err); btn.disabled = false; btn.textContent = 'Salvar'; }
         };
       }
     });
@@ -638,25 +661,27 @@ function openManageHealthPlans(onChanged) {
       <div style="flex:1"></div>
       <button class="btn-secondary" data-close>Fechar</button>`,
     onMount: (m) => {
+      const refresh = () => { m.querySelector('#hp-list').innerHTML = render(); wire(); };
       const wire = () => {
         m.querySelectorAll('#hp-list .doc-row').forEach(row => {
-          const i = +row.dataset.i;
-          const plans = loadHealthPlans();
-          row.querySelector('[data-act="edit"]').onclick = () => {
-            openPlanForm(plans[i], i);
-          };
-          row.querySelector('[data-act="del"]').onclick = () => {
-            if (!confirm(`Excluir o convênio "${plans[i].name}"?`)) return;
-            plans.splice(i, 1);
-            saveHealthPlans(plans);
-            m.querySelector('#hp-list').innerHTML = render();
-            wire();
-            if (onChanged) onChanged();
+          const id = row.dataset.id;
+          const hp = healthPlans.find(x => x.id === id);
+          if (!hp) return;
+          row.querySelector('[data-act="edit"]').onclick = () => openPlanForm(hp, refresh);
+          row.querySelector('[data-act="del"]').onclick = async () => {
+            if (!confirm(`Excluir o convênio "${hp.name}"?`)) return;
+            try {
+              const { error } = await sb.from('emr_health_plans').delete().eq('id', id);
+              if (error) throw error;
+              healthPlans = healthPlans.filter(x => x.id !== id);
+              refresh();
+              if (onChanged) onChanged();
+            } catch (err) { alertErr(err); }
           };
         });
       };
       wire();
-      m.querySelector('#hp-new').onclick = () => openPlanForm(null, -1);
+      m.querySelector('#hp-new').onclick = () => openPlanForm(null, refresh);
     }
   });
 }
@@ -843,7 +868,7 @@ async function onSignedIn(user) {
 
   hide('view-loading');
   show('view-patients');
-  await Promise.all([loadPatients(), loadCustomExamGroups()]);
+  await Promise.all([loadPatients(), loadCustomExamGroups(), loadHealthPlansDB()]);
 }
 
 /* ===========================================================
