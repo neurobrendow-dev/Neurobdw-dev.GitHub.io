@@ -2460,7 +2460,7 @@ function medEditorHTML(m, i) {
           <label>Quantidade</label>
           <input data-f="quantity" value="${escapeHtml(m.quantity || '')}" placeholder="ex: 10 comprimidos" list="${qtyId}">
           <datalist id="${qtyId}">
-            <option value="uso contínuo"></option>
+            <option value="Uso Contínuo"></option>
             <option value="1 comprimido"></option>
             <option value="2 comprimidos"></option>
             <option value="7 comprimidos"></option>
@@ -3116,7 +3116,7 @@ function drawReceitaEspecialVia(doc, xOff, d, c, pageNote = '') {
     doc.text(nameStr, xLeft, yMed);
     const nameW = doc.getTextWidth(nameStr);
 
-    const usoStr = 'uso contínuo';
+    const usoStr = 'Uso Contínuo';
     doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5);
     const usoW = doc.getTextWidth(usoStr);
 
