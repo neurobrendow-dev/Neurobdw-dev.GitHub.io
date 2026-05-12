@@ -999,7 +999,7 @@ window.EXAM_GROUPS = [
     { name: 'Ferritina, ferro sérico, TIBC, saturação de transferrina', specs: '' },
     { name: 'Vitamina B12 e ácido fólico', specs: '' },
     { name: 'TSH', specs: '' },
-    { name: 'LDH, bilirrubinas, haptoglobina', specs: 'se suspeita de hemólise' },
+    { name: 'LDH, bilirrubinas, haptoglobina, Coombs direto', specs: 'se suspeita de hemólise' },
     { name: 'Função renal e hepática', specs: '' },
     { name: 'EAS / pesquisa de sangue oculto nas fezes', specs: '' },
   ]},
