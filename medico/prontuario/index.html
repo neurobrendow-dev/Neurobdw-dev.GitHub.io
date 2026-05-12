@@ -499,7 +499,9 @@ permalink: /medico/prontuario/
 =========================================================== */
 const SUPABASE_URL      = 'https://telypzqmofahhhnphend.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_zstGbiAexvo1-IxgaNFObQ_mrTNQ8pg';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true }
+});
 
 const DOCTOR_NAME       = 'Dr. Brendow Mártin';
 const DOCTOR_LEGAL_NAME = 'Brendow Martin Freitas Gadelha';
@@ -865,6 +867,9 @@ async function onSignedIn(user) {
   `;
   $('btn-ai-config').onclick = openAIConfig;
   $('btn-logout').onclick = async () => { await sb.auth.signOut(); };
+
+  // heartbeat: refresca token silenciosamente a cada 10 min — evita logout por inatividade
+  setInterval(() => sb.auth.getSession(), 10 * 60 * 1000);
 
   hide('view-loading');
   show('view-patients');
@@ -1314,8 +1319,14 @@ function openConsultForm(c) {
     if (a != null) parts.push(`${a} anos`);
     if (currentPatient.sex) parts.push({ F: 'Feminino', M: 'Masculino', O: 'Outro' }[currentPatient.sex]);
     if (currentPatient.health_plan) parts.push(currentPatient.health_plan);
+    const companionLine = currentPatient.companion_name
+      ? `<div style="margin-top:4px;font-size:0.82rem;color:#5a6f85;">
+           Acompanhante: <strong style="color:var(--navy);">${escapeHtml(currentPatient.companion_name)}</strong>${currentPatient.companion_relation ? ' · ' + escapeHtml(currentPatient.companion_relation) : ''}
+         </div>`
+      : '';
     return `<div style="background:#eef2f7;border-left:3px solid var(--gold);padding:10px 14px;margin-bottom:16px;font-size:0.88rem;color:var(--steel);">
       <strong style="color:var(--navy);">${escapeHtml(parts[0])}</strong>${parts.slice(1).map(p => ` · ${escapeHtml(p)}`).join('')}
+      ${companionLine}
     </div>`;
   })();
 
@@ -1420,6 +1431,7 @@ function openConsultForm(c) {
       </form>
     `,
     footHTML: `
+      <span id="autosave-status" style="font-size:0.74rem;color:#8a9bb0;align-self:center;"></span>
       <div style="flex:1"></div>
       <button class="btn-secondary" data-close>Cancelar</button>
       <button class="btn-primary" id="btn-save-consult">${isNew ? 'Registrar consulta' : 'Salvar'}</button>
@@ -1473,25 +1485,80 @@ function openConsultForm(c) {
         };
       });
 
-      modal.querySelector('#btn-save-consult').onclick = async () => {
+      // ---- AUTO-SAVE ----
+      let draftId = isNew ? null : (c?.id || null);
+
+      const collectPayload = () => {
         const f = modal.querySelector('#form-consult');
-        if (!f.reportValidity()) return;
+        if (!f) return null;
         const fd = new FormData(f);
-        const payload = { patient_id: currentPatient.id, cid_codes: cidCodes };
+        const p = { patient_id: currentPatient.id, cid_codes: cidCodes };
         for (const [k, v] of fd.entries()) {
-          if (k === 'consultation_date') payload[k] = new Date(v).toISOString();
-          else payload[k] = v.trim() === '' ? null : v.trim();
+          if (k === 'consultation_date') { try { p[k] = new Date(v).toISOString(); } catch { p[k] = null; } }
+          else p[k] = v.trim() === '' ? null : v.trim();
         }
+        return p;
+      };
+
+      const setStatus = (msg) => {
+        const el = modal.querySelector('#autosave-status');
+        if (el) el.textContent = msg;
+      };
+
+      const autoSave = async () => {
+        if (!modal.isConnected) return;
+        const payload = collectPayload();
+        if (!payload) return;
         try {
-          if (isNew) {
+          if (!draftId) {
+            const { data, error } = await sb.from('emr_consultations').insert(payload).select().single();
+            if (error) throw error;
+            draftId = data.id;
+            currentConsults.unshift(data);
+          } else {
+            const { data, error } = await sb.from('emr_consultations')
+              .update(payload).eq('id', draftId).select().single();
+            if (error) throw error;
+            const idx = currentConsults.findIndex(x => x.id === draftId);
+            if (idx >= 0) currentConsults[idx] = data;
+          }
+          const t = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          setStatus(`Salvo automaticamente às ${t}`);
+        } catch (err) {
+          console.warn('[autosave]', err);
+          setStatus('Falha no auto-save');
+        }
+      };
+
+      const autoSaveTimer = setInterval(autoSave, 30000);
+
+      // para o intervalo quando o modal fechar
+      const asObs = new MutationObserver(() => {
+        if (!modal.isConnected) { clearInterval(autoSaveTimer); asObs.disconnect(); }
+      });
+      asObs.observe(document.body, { childList: true });
+
+      // ---- SALVAR MANUAL ----
+      modal.querySelector('#btn-save-consult').onclick = async () => {
+        clearInterval(autoSaveTimer); asObs.disconnect();
+        const f = modal.querySelector('#form-consult');
+        if (!f.reportValidity()) { setInterval(autoSave, 30000); return; }
+        const payload = collectPayload();
+        setStatus('Salvando…');
+        try {
+          if (!draftId) {
+            // nova consulta sem draft: insere agora
             const { data: ins, error } = await sb.from('emr_consultations').insert(payload).select().single();
             if (error) throw error;
             currentConsults.unshift(ins);
           } else {
-            const { data: upd, error } = await sb.from('emr_consultations').update(payload).eq('id', c.id).select().single();
+            // draft ou edição existente: atualiza
+            const { data: upd, error } = await sb.from('emr_consultations')
+              .update(payload).eq('id', draftId).select().single();
             if (error) throw error;
-            const idx = currentConsults.findIndex(x => x.id === c.id);
+            const idx = currentConsults.findIndex(x => x.id === draftId);
             if (idx >= 0) currentConsults[idx] = upd;
+            else currentConsults.unshift(upd);
           }
           closeModal();
           renderConsults();
@@ -2458,9 +2525,14 @@ function medEditorHTML(m, i) {
         </div>
         <div class="form-group">
           <label>Quantidade</label>
-          <input data-f="quantity" value="${escapeHtml(m.quantity || '')}" placeholder="ex: 10 comprimidos" list="${qtyId}">
+          <input data-f="quantity" value="${escapeHtml(m.quantity || '')}" placeholder="ex: 10 comprimidos" list="${qtyId}"
+                 ${m.quantity === 'uso contínuo' ? 'readonly style="background:#f5f2ee;"' : ''}>
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.8rem;color:#5a6f85;margin-top:5px;cursor:pointer;">
+            <input type="checkbox" data-f="uso-continuo" ${m.quantity === 'uso contínuo' ? 'checked' : ''} style="width:auto;">
+            Uso contínuo
+          </label>
           <datalist id="${qtyId}">
-            <option value="Uso Contínuo"></option>
+            <option value="uso contínuo"></option>
             <option value="1 comprimido"></option>
             <option value="2 comprimidos"></option>
             <option value="7 comprimidos"></option>
@@ -2550,6 +2622,31 @@ function wireMedAutocomplete(editor) {
   if (posInput) posInput.addEventListener('focus', () => updatePosologies(findMedication(nameInput.value)));
   // disparo inicial caso já tenha valor
   if (nameInput.value) update();
+
+  // checkbox "Uso contínuo"
+  const usoCb  = editor.querySelector('[data-f=uso-continuo]');
+  const qtyInp = editor.querySelector('[data-f=quantity]');
+  if (usoCb && qtyInp) {
+    const applyUsoContinuo = () => {
+      if (usoCb.checked) {
+        qtyInp.value    = 'uso contínuo';
+        qtyInp.readOnly = true;
+        qtyInp.style.background = '#f5f2ee';
+      } else {
+        if (qtyInp.value === 'uso contínuo') qtyInp.value = '';
+        qtyInp.readOnly = false;
+        qtyInp.style.background = '';
+      }
+    };
+    usoCb.addEventListener('change', applyUsoContinuo);
+    // se digitou "uso contínuo" manualmente, sincroniza o checkbox
+    qtyInp.addEventListener('input', () => {
+      const isUso = qtyInp.value.trim().toLowerCase() === 'uso contínuo';
+      usoCb.checked = isUso;
+      qtyInp.readOnly = isUso;
+      qtyInp.style.background = isUso ? '#f5f2ee' : '';
+    });
+  }
 }
 
 function wireMedRemovers(m) {
@@ -3116,7 +3213,7 @@ function drawReceitaEspecialVia(doc, xOff, d, c, pageNote = '') {
     doc.text(nameStr, xLeft, yMed);
     const nameW = doc.getTextWidth(nameStr);
 
-    const usoStr = 'Uso Contínuo';
+    const usoStr = 'uso contínuo';
     doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5);
     const usoW = doc.getTextWidth(usoStr);
 
