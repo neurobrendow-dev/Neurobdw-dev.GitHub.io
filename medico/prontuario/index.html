@@ -874,14 +874,18 @@ async function onSignedIn(user) {
   currentProfile = profile;
   $('topbar-actions').innerHTML = `
     <a class="btn-link" href="/medico/">← MENU PRINCIPAL</a>
+    <button class="btn-icp" id="btn-pending-global" title="Ver todos os documentos pendentes de assinatura" style="display:none;">⏳ <span id="pending-count">0</span> pendentes</button>
     <button class="btn-icp" id="btn-icp" title="Carregar certificado ICP-Brasil para assinar documentos">🔏 ICP-Brasil</button>
     <button class="btn-link" id="btn-ai-config" title="Configurar IA">⚙ IA</button>
     <span class="topbar-user">Dr(a). ${escapeHtml(profile.full_name.split(' ')[0])}</span>
     <button class="btn-link" id="btn-logout">Sair</button>
   `;
+  $('btn-pending-global').onclick = openGlobalPendingModal;
   $('btn-icp').onclick = openCertModal;
   $('btn-ai-config').onclick = openAIConfig;
   $('btn-logout').onclick = async () => { await sb.auth.signOut(); };
+  autoLoadCert();
+  refreshGlobalPendingCount();
 
   // heartbeat: refresca token silenciosamente a cada 10 min — evita logout por inatividade
   setInterval(() => sb.auth.getSession(), 10 * 60 * 1000);
@@ -1470,6 +1474,7 @@ function openConsultForm(c) {
       <span id="autosave-status" style="font-size:0.74rem;color:#8a9bb0;align-self:center;"></span>
       <div style="flex:1"></div>
       <button class="btn-secondary" data-close>Cancelar</button>
+      ${sigState.loaded ? `<button class="btn-primary" id="btn-sign-consult" style="background:var(--steel);color:#fff;">🔏 Salvar e assinar</button>` : ''}
       <button class="btn-primary" id="btn-save-consult">${isNew ? 'Registrar consulta' : 'Salvar'}</button>
     `,
     onMount: (modal) => {
@@ -1600,6 +1605,43 @@ function openConsultForm(c) {
           renderConsults();
           renderSummary();
         } catch (err) { alertErr(err); }
+      };
+
+      // Botão "Salvar e assinar" — salva no Supabase, obtém id, gera PDF assinado
+      const signConsultBtn = modal.querySelector('#btn-sign-consult');
+      if (signConsultBtn) signConsultBtn.onclick = async () => {
+        clearInterval(autoSaveTimer); asObs.disconnect();
+        const f = modal.querySelector('#form-consult');
+        if (!f.reportValidity()) return;
+        const payload = collectPayload();
+        signConsultBtn.disabled = true; signConsultBtn.textContent = 'Salvando…';
+        try {
+          let saved;
+          if (!draftId) {
+            const { data, error } = await sb.from('emr_consultations').insert(payload).select().single();
+            if (error) throw error;
+            saved = data;
+            currentConsults.unshift(saved);
+          } else {
+            const { data, error } = await sb.from('emr_consultations').update(payload).eq('id', draftId).select().single();
+            if (error) throw error;
+            saved = data;
+            const idx = currentConsults.findIndex(x => x.id === draftId);
+            if (idx >= 0) currentConsults[idx] = saved;
+            else currentConsults.unshift(saved);
+          }
+          // Gera PDF com assinatura vinculada ao id salvo
+          sigState.signingNow         = true;
+          sigState.pendingSourceTable = 'emr_consultations';
+          sigState.pendingSourceId    = saved.id;
+          generateConsultPDF(saved);
+          closeModal();
+          renderConsults();
+          renderSummary();
+        } catch (err) {
+          alertErr(err);
+          signConsultBtn.disabled = false; signConsultBtn.textContent = '🔏 Salvar e assinar';
+        }
       };
     }
   });
@@ -2254,6 +2296,205 @@ document.querySelectorAll('.doc-creator-btn').forEach(b => {
 });
 
 /* ===========================================================
+   PENDENTES DE ASSINATURA — visão global (todos os pacientes)
+=========================================================== */
+async function loadGlobalPending() {
+  const [docsRes, consultsRes] = await Promise.all([
+    sb.from('emr_documents')
+      .select('id, type, title, issue_date, patient_id, emr_patients(full_name)')
+      .eq('is_signed', false)
+      .order('issue_date', { ascending: false }),
+    sb.from('emr_consultations')
+      .select('id, type, consultation_date, chief_complaint, hypothesis, patient_id, emr_patients(full_name)')
+      .eq('is_signed', false)
+      .order('consultation_date', { ascending: false }),
+  ]);
+  const docs     = (docsRes.data    || []).map(d => ({ ...d, _kind: 'doc',     _patientName: d.emr_patients?.full_name || '—' }));
+  const consults = (consultsRes.data || []).map(c => ({ ...c, _kind: 'consult', _patientName: c.emr_patients?.full_name || '—' }));
+  return [...docs, ...consults].sort((a, b) => {
+    const da = a.issue_date || a.consultation_date || '';
+    const db = b.issue_date || b.consultation_date || '';
+    return db.localeCompare(da);
+  });
+}
+
+async function refreshGlobalPendingCount() {
+  const btn   = document.getElementById('btn-pending-global');
+  const badge = document.getElementById('pending-count');
+  if (!btn || !badge) return;
+  try {
+    const [d, c] = await Promise.all([
+      sb.from('emr_documents').select('id', { count: 'exact', head: true }).eq('is_signed', false),
+      sb.from('emr_consultations').select('id', { count: 'exact', head: true }).eq('is_signed', false),
+    ]);
+    const total = (d.count || 0) + (c.count || 0);
+    badge.textContent = total;
+    btn.style.display = total > 0 ? '' : 'none';
+    btn.className = total > 0 ? 'btn-icp cert-exp' : 'btn-icp';
+  } catch (_) {}
+}
+
+async function signItemSilently(item) {
+  // Carrega dados completos do paciente se necessário
+  let patient = (currentPatient?.id === item.patient_id) ? currentPatient : null;
+  if (!patient) {
+    const { data } = await sb.from('emr_patients').select('*').eq('id', item.patient_id).single();
+    patient = data;
+  }
+  if (!patient) throw new Error('Paciente não encontrado');
+
+  const savedPatient = currentPatient;
+  currentPatient = patient;
+
+  return new Promise((resolve, reject) => {
+    sigState._resolve    = resolve;
+    sigState.signingNow  = true;
+    sigState.silentMode  = true;
+    sigState.pendingSourceTable = item._kind === 'doc' ? 'emr_documents' : 'emr_consultations';
+    sigState.pendingSourceId    = item.id;
+    try {
+      if (item._kind === 'doc') generateDocPDF(item);
+      else                      generateConsultPDF(item);
+    } catch (err) {
+      sigState._resolve = null;
+      currentPatient = savedPatient;
+      reject(err);
+    }
+    // Após a promise ser resolvida (pelo finally de pdfSave), restaura paciente
+    Promise.resolve().then(() => {
+      // Aguarda a resolução do _resolve antes de restaurar
+    });
+  }).finally(() => {
+    currentPatient = savedPatient;
+  });
+}
+
+async function openGlobalPendingModal() {
+  if (!sigState.loaded) { openCertModal(); return; }
+
+  openModal({
+    title: 'Pendentes de assinatura — todos os pacientes',
+    size: 'lg',
+    bodyHTML: `<div style="text-align:center;padding:24px;color:var(--gray);">
+      <span class="spinner" style="display:inline-block;margin-right:8px;"></span>Carregando…
+    </div>`,
+    footHTML: `<button class="btn-secondary" data-close>Fechar</button>`,
+  });
+
+  let items;
+  try { items = await loadGlobalPending(); }
+  catch (err) { alertErr(err); return; }
+
+  // Encontra o modal aberto e atualiza o body
+  const wrapper = document.querySelector('.modal-bg:last-child');
+  if (!wrapper) return;
+  const body = wrapper.querySelector('.modal-body');
+  const foot = wrapper.querySelector('.modal-foot');
+
+  const TYPE_LABELS = {
+    receita_simples:'Receita simples', receita_especial:'Receita especial',
+    exames:'Solicitação de exames', atestado:'Atestado', laudo:'Laudo', relatorio:'Relatório',
+    primeira:'Primeira consulta', retorno:'Retorno', urgencia:'Urgência', teleconsulta:'Teleconsulta',
+  };
+
+  if (!items.length) {
+    body.innerHTML = `<div class="empty-state">Nenhum documento pendente de assinatura.</div>`;
+    return;
+  }
+
+  body.innerHTML = `
+    <p style="font-size:0.84rem;color:#5a6f85;margin-bottom:14px;">
+      ${items.length} item(s) aguardando assinatura digital ICP-Brasil.
+      O botão <strong>Assinar todos</strong> assina em sequência, sem download — apenas registra a assinatura digital.
+    </p>
+    <div id="global-pending-list">
+      ${items.map((item, idx) => {
+        const date  = fmtDate(item.issue_date || item.consultation_date);
+        const label = TYPE_LABELS[item.type] || item.type;
+        const title = item._kind === 'doc'
+          ? (item.title || label)
+          : (item.chief_complaint || item.hypothesis || label);
+        return `
+        <div class="doc-row" data-idx="${idx}" id="gp-row-${idx}" style="align-items:center;">
+          <div class="doc-date">${date}</div>
+          <div style="font-size:0.8rem;color:var(--gray);">${escapeHtml(item._patientName)}</div>
+          <div>
+            <span class="doc-type-badge ${item.type}">${label}</span>
+            <span style="margin-left:6px;font-size:0.85rem;">${escapeHtml(title.slice(0,60))}</span>
+          </div>
+          <div class="doc-actions">
+            <span id="gp-status-${idx}" style="font-size:0.78rem;color:var(--gray);"></span>
+            <button class="btn-ghost" data-idx="${idx}" data-act="sign-one"
+              style="color:var(--steel);border:1px solid var(--steel);padding:4px 8px;">🔏 Assinar</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  foot.innerHTML = `
+    <button class="btn-secondary" data-close>Fechar</button>
+    <button class="btn-primary" id="btn-sign-all">🔏 Assinar todos (${items.length})</button>`;
+  // rebind close
+  foot.querySelector('[data-close]').onclick = () => closeModal();
+
+  const setRowStatus = (idx, html) => {
+    const el = document.getElementById(`gp-status-${idx}`);
+    if (el) el.innerHTML = html;
+  };
+  const disableSignBtn = (idx) => {
+    const btn = body.querySelector(`[data-idx="${idx}"][data-act="sign-one"]`);
+    if (btn) btn.disabled = true;
+  };
+
+  // Assinar individualmente
+  body.querySelectorAll('[data-act="sign-one"]').forEach(btn => {
+    btn.onclick = async () => {
+      const idx  = +btn.dataset.idx;
+      const item = items[idx];
+      btn.disabled = true;
+      setRowStatus(idx, '⏳');
+      try {
+        await signItemSilently(item);
+        setRowStatus(idx, '<span style="color:#2d6a4f;">✓ assinado</span>');
+        items.splice(idx, 1); // remove da lista local
+        refreshGlobalPendingCount();
+      } catch (err) {
+        setRowStatus(idx, `<span style="color:var(--danger);">✗ falha</span>`);
+        btn.disabled = false;
+        console.warn('[ICP global]', err.message);
+      }
+    };
+  });
+
+  // Assinar todos
+  foot.querySelector('#btn-sign-all').onclick = async () => {
+    const allBtns = foot.querySelector('#btn-sign-all');
+    allBtns.disabled = true;
+    allBtns.textContent = '⏳ Assinando…';
+    let ok = 0, fail = 0;
+    const pending = [...items.keys()]; // índices ainda não assinados
+    for (const idx of pending) {
+      const item = items[idx];
+      if (!item) continue;
+      disableSignBtn(idx);
+      setRowStatus(idx, '⏳');
+      try {
+        await signItemSilently(item);
+        setRowStatus(idx, '<span style="color:#2d6a4f;">✓ assinado</span>');
+        ok++;
+      } catch (err) {
+        setRowStatus(idx, `<span style="color:var(--danger);" title="${escapeHtml(err.message)}">✗ falha</span>`);
+        fail++;
+      }
+    }
+    allBtns.textContent = `✓ Concluído — ${ok} assinado(s)${fail ? `, ${fail} falha(s)` : ''}`;
+    showToast(`${ok} documento(s) assinado(s) digitalmente — ICP-Brasil ✓`);
+    refreshGlobalPendingCount();
+    if (currentPatient) { renderDocs(); renderConsults(); renderPendingSignatures(); }
+  };
+}
+
+/* ===========================================================
    DOCUMENTOS — formulários por tipo
 =========================================================== */
 function openDocForm(type, doc) {
@@ -2495,6 +2736,7 @@ function openDocForm(type, doc) {
     footHTML: `
       <div style="flex:1"></div>
       <button class="btn-secondary" data-close>Cancelar</button>
+      ${sigState.loaded ? `<button class="btn-primary" id="btn-sign-doc" style="background:var(--steel);color:#fff;">🔏 Salvar e assinar</button>` : ''}
       <button class="btn-primary" id="btn-save-doc">${isNew ? 'Salvar e gerar PDF' : 'Salvar'}</button>
     `,
     onMount: (m) => {
@@ -2647,6 +2889,45 @@ function openDocForm(type, doc) {
           console.error('[btn-save-doc] erro inesperado:', outer);
           alert('Erro inesperado:\n\n' + (outer?.message || outer));
           if (btn) { btn.disabled = false; btn.textContent = origLabel; }
+        }
+      };
+
+      // Botão "Salvar e assinar" — salva no Supabase primeiro (obtém id), depois assina
+      const signDocBtn = m.querySelector('#btn-sign-doc');
+      if (signDocBtn) signDocBtn.onclick = async () => {
+        signDocBtn.disabled = true; signDocBtn.textContent = 'Salvando…';
+        try {
+          const payload = {
+            patient_id: currentPatient.id,
+            type,
+            title: m.querySelector('#doc-title').value.trim() || defaultTitle,
+            issue_date: m.querySelector('#doc-issue-date').value || new Date().toISOString().slice(0,10),
+            content: getContent(m),
+          };
+          let saved;
+          if (isNew) {
+            const { data, error } = await sb.from('emr_documents').insert(payload).select().single();
+            if (error) throw error;
+            saved = data;
+            currentDocs.unshift(saved);
+          } else {
+            const { data, error } = await sb.from('emr_documents').update(payload).eq('id', doc.id).select().single();
+            if (error) throw error;
+            saved = data;
+            const idx = currentDocs.findIndex(x => x.id === doc.id);
+            if (idx >= 0) currentDocs[idx] = saved;
+          }
+          // Agora gera PDF com assinatura vinculada ao id salvo
+          sigState.signingNow         = true;
+          sigState.pendingSourceTable = 'emr_documents';
+          sigState.pendingSourceId    = saved.id;
+          generateDocPDF(saved);
+          closeModal();
+          renderDocs();
+          renderSummary();
+        } catch (err) {
+          alertErr(err);
+          signDocBtn.disabled = false; signDocBtn.textContent = '🔏 Salvar e assinar';
         }
       };
     }
@@ -2988,6 +3269,9 @@ const sigState = {
   signingNow: false,
   pendingSourceTable: null,
   pendingSourceId: null,
+  // assinatura silenciosa (sem download) — usada no "Assinar todos"
+  silentMode: false,
+  _resolve: null,   // resolvido ao final da assinatura em background
 };
 
 function showToast(msg, isErr = false) {
@@ -3051,6 +3335,39 @@ function loadP12(arrayBuffer, password) {
   Object.assign(sigState, { loaded: true, cert, privateKey, cn, issuer, serial, validUntil });
 }
 
+/* Salva o certificado P12 (base64) + senha no localStorage para auto-carregar
+   nas próximas sessões. A chave privada NUNCA é exportada — apenas o arquivo
+   P12 original (que já é criptografado com a senha do usuário) é armazenado. */
+function saveCertLocally(p12Bytes, password) {
+  const b64 = btoa(String.fromCharCode(...new Uint8Array(p12Bytes)));
+  localStorage.setItem('cert_p12_b64', b64);
+  localStorage.setItem('cert_pwd',     password);
+}
+
+function clearCertLocally() {
+  localStorage.removeItem('cert_p12_b64');
+  localStorage.removeItem('cert_pwd');
+}
+
+/* Tenta auto-carregar o certificado salvo no localStorage. */
+function autoLoadCert() {
+  const b64 = localStorage.getItem('cert_p12_b64');
+  const pwd  = localStorage.getItem('cert_pwd');
+  if (!b64 || pwd === null) return;
+  try {
+    const binary = atob(b64);
+    const bytes  = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    loadP12(bytes.buffer, pwd);
+    updateCertIndicator();
+    refreshGlobalPendingCount();
+    console.info('[ICP] Certificado auto-carregado do localStorage.');
+  } catch (err) {
+    console.warn('[ICP] Falha ao auto-carregar certificado:', err.message);
+    clearCertLocally();
+  }
+}
+
 function updateCertIndicator() {
   const btn = document.getElementById('btn-icp');
   if (!btn) return;
@@ -3068,17 +3385,17 @@ function updateCertIndicator() {
 
 function openCertModal() {
   const alreadyLoaded = sigState.loaded;
+  const hasSaved = !!localStorage.getItem('cert_p12_b64');
   openModal({
     title: 'Certificado Digital ICP-Brasil',
     size: 'md',
     bodyHTML: `
       <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:14px;">
         Carregue seu certificado <strong>A1</strong> (arquivo <strong>.p12</strong> / <strong>.pfx</strong>).
-        A chave privada fica <em>apenas na memória</em> deste navegador e nunca é enviada ao servidor.<br>
-        Conformidade: <strong>Lei 14.063/2020</strong> (assinatura eletrônica avançada) · <strong>CFM 2.299/2021</strong>.
+        Conformidade: <strong>Lei 14.063/2020</strong> · <strong>CFM 2.299/2021</strong>.
       </p>
       ${alreadyLoaded ? `
-        <div style="background:#f0faf5;border:1px solid #2d9e6b;padding:12px 14px;margin-bottom:14px;font-size:0.88rem;border-radius:2px;">
+        <div style="background:#f0faf5;border:1px solid #2d9e6b;padding:12px 14px;margin-bottom:14px;font-size:0.88rem;">
           <strong style="color:#2d6a4f;">✓ Certificado em uso</strong><br>
           <span style="color:#4a7a62;">${escapeHtml(sigState.cn)}</span><br>
           <span style="font-size:0.79rem;color:#5a6f85;">
@@ -3094,11 +3411,22 @@ function openCertModal() {
         <label>Senha do certificado</label>
         <input type="password" id="cert-pwd" placeholder="Senha do arquivo P12" autocomplete="current-password">
       </div>
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;padding:10px 12px;background:#f5f8ff;border:1px solid #c8d8f0;">
+        <input type="checkbox" id="cert-remember" ${hasSaved ? 'checked' : ''} style="width:auto;margin-top:3px;flex-shrink:0;">
+        <label for="cert-remember" style="font-size:0.82rem;color:#4a5a70;cursor:pointer;line-height:1.45;">
+          <strong>Salvar neste dispositivo</strong> — o arquivo P12 e a senha ficam no armazenamento local
+          do navegador (localStorage) para carregar automaticamente nas próximas sessões.
+          Use apenas em dispositivo pessoal e seguro.
+        </label>
+      </div>
       <div id="cert-err" style="display:none;color:var(--danger);font-size:0.83rem;padding:8px 10px;background:#fdecea;margin-bottom:8px;"></div>
-      ${alreadyLoaded ? `
+      ${alreadyLoaded || hasSaved ? `
         <details style="margin-top:8px;">
-          <summary style="font-size:0.82rem;color:#5a6f85;cursor:pointer;">Remover certificado da sessão</summary>
-          <button id="btn-clear-cert" class="btn-danger" style="margin-top:10px;font-size:0.82rem;">Descarregar certificado</button>
+          <summary style="font-size:0.82rem;color:#5a6f85;cursor:pointer;">Remover certificado</summary>
+          <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+            ${alreadyLoaded ? `<button id="btn-clear-cert" class="btn-danger" style="font-size:0.82rem;">Descarregar da sessão</button>` : ''}
+            ${hasSaved      ? `<button id="btn-clear-saved" class="btn-danger" style="font-size:0.82rem;">Apagar do dispositivo</button>` : ''}
+          </div>
         </details>
       ` : ''}
     `,
@@ -3108,10 +3436,11 @@ function openCertModal() {
     `,
     onMount(modal) {
       modal.querySelector('#btn-load-cert').onclick = async () => {
-        const fileIn = modal.querySelector('#cert-file');
-        const pwd    = modal.querySelector('#cert-pwd').value;
-        const errDiv = modal.querySelector('#cert-err');
-        const btn    = modal.querySelector('#btn-load-cert');
+        const fileIn  = modal.querySelector('#cert-file');
+        const pwd     = modal.querySelector('#cert-pwd').value;
+        const remember = modal.querySelector('#cert-remember').checked;
+        const errDiv  = modal.querySelector('#cert-err');
+        const btn     = modal.querySelector('#btn-load-cert');
         if (!fileIn.files[0]) {
           errDiv.style.display = 'block';
           errDiv.textContent = 'Selecione um arquivo .p12 ou .pfx.';
@@ -3120,13 +3449,17 @@ function openCertModal() {
         btn.disabled = true; btn.textContent = 'Carregando…';
         errDiv.style.display = 'none';
         try {
-          loadP12(await fileIn.files[0].arrayBuffer(), pwd);
+          const ab = await fileIn.files[0].arrayBuffer();
+          loadP12(ab, pwd);
+          if (remember) saveCertLocally(ab, pwd);
+          else          clearCertLocally();
           updateCertIndicator();
+          refreshGlobalPendingCount();
           closeModal();
-          showToast(`Certificado carregado: ${sigState.cn}. Documentos serão assinados automaticamente.`);
+          showToast(`Certificado carregado: ${sigState.cn}.${remember ? ' Salvo neste dispositivo.' : ''}`);
         } catch (err) {
           errDiv.style.display = 'block';
-          errDiv.textContent = 'Erro: ' + (err.message || 'falha ao carregar certificado. Verifique o arquivo e a senha.');
+          errDiv.textContent = 'Erro: ' + (err.message || 'verifique o arquivo e a senha.');
           btn.disabled = false; btn.textContent = 'Carregar certificado';
         }
       };
@@ -3136,6 +3469,12 @@ function openCertModal() {
         updateCertIndicator();
         closeModal();
         showToast('Certificado removido da sessão.');
+      };
+      const clearSavedBtn = modal.querySelector('#btn-clear-saved');
+      if (clearSavedBtn) clearSavedBtn.onclick = () => {
+        clearCertLocally();
+        closeModal();
+        showToast('Certificado apagado do dispositivo.');
       };
     }
   });
@@ -3265,16 +3604,18 @@ async function pdfSave(doc, filename) {
     return;
   }
 
-  // Download imediato — não espera a assinatura
-  try { window.open(blobUrl, '_blank', 'noopener,noreferrer'); } catch (_) {}
-  try {
-    const a = document.createElement('a');
-    a.href = blobUrl; a.download = fname; a.style.display = 'none';
-    document.body.appendChild(a); a.click();
-    setTimeout(() => { try { a.remove(); } catch (_) {} }, 500);
-  } catch (_) {}
-  showPdfBanner(blobUrl, fname);
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
+  // Download — pulado no modo silencioso (assinatura em lote)
+  if (!silentMode) {
+    try { window.open(blobUrl, '_blank', 'noopener,noreferrer'); } catch (_) {}
+    try {
+      const a = document.createElement('a');
+      a.href = blobUrl; a.download = fname; a.style.display = 'none';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { try { a.remove(); } catch (_) {} }, 500);
+    } catch (_) {}
+    showPdfBanner(blobUrl, fname);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
+  }
 
   // Assinatura e registro em background
   if (shouldSign && verifyId) {
@@ -3287,7 +3628,6 @@ async function pdfSave(doc, filename) {
           sourceTable, sourceId,
           patientId: currentPatient?.id,
         });
-        // Marca o registro de origem como assinado
         if (sourceTable && sourceId) {
           await sb.from(sourceTable)
             .update({ is_signed: true, signed_at: new Date().toISOString() })
@@ -3295,19 +3635,27 @@ async function pdfSave(doc, filename) {
           if (sourceTable === 'emr_documents') {
             const d = currentDocs.find(x => x.id === sourceId);
             if (d) { d.is_signed = true; d.signed_at = new Date().toISOString(); }
-            renderDocs(); renderPendingSignatures();
+            if (!silentMode) { renderDocs(); renderPendingSignatures(); }
           } else if (sourceTable === 'emr_consultations') {
             const c = currentConsults.find(x => x.id === sourceId);
             if (c) { c.is_signed = true; c.signed_at = new Date().toISOString(); }
-            renderConsults(); renderPendingSignatures();
+            if (!silentMode) { renderConsults(); renderPendingSignatures(); }
           }
         }
-        showToast(`Documento assinado — ICP-Brasil ✓`);
+        refreshGlobalPendingCount();
+        if (!silentMode) showToast(`Documento assinado — ICP-Brasil ✓`);
       } catch (err) {
         console.warn('[ICP] erro ao assinar:', err.message);
-        showToast('PDF gerado, mas assinatura falhou: ' + err.message, true);
+        if (!silentMode) showToast('PDF gerado, mas assinatura falhou: ' + err.message, true);
+      } finally {
+        // Sinaliza conclusão para o "Assinar todos" que aguarda em sequência
+        if (sigState._resolve) { sigState._resolve(); sigState._resolve = null; }
+        if (silentMode) URL.revokeObjectURL(blobUrl);
       }
     })();
+  } else {
+    // Sem assinatura: resolve imediatamente para não travar o lote
+    if (sigState._resolve) { sigState._resolve(); sigState._resolve = null; }
   }
 }
 
@@ -3723,11 +4071,6 @@ function drawReceitaEspecialVia(doc, xOff, d, c, pageNote = '') {
   doc.setFont('helvetica','bolditalic'); doc.setFontSize(8);
   doc.text('ASSINATURA DO FARMACÊUTICO', xF + compW / 2, fSigY + 4, { align: 'center' });
 
-  // ----- 6) RODAPÉ (cidade / e-mail) -----
-  doc.setFont('helvetica','italic'); doc.setFontSize(8);
-  doc.setTextColor(140, 150, 165);
-  doc.text(docCity(),                  xRightLimit, PAGE_H - 7,   { align: 'right' });
-  doc.text(`Email: ${DOCTOR_EMAIL}`,   xRightLimit, PAGE_H - 3.5, { align: 'right' });
   doc.setTextColor(13, 27, 42);
 }
 
