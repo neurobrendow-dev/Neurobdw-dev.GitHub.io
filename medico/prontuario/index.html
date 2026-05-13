@@ -3579,9 +3579,11 @@ function safeFilename(s) {
 async function pdfSave(doc, filename) {
   // Captura e limpa flags de assinatura imediatamente (evita vazamento entre chamadas)
   const shouldSign     = sigState.signingNow;
+  const silentMode     = sigState.silentMode;
   const sourceTable    = sigState.pendingSourceTable;
   const sourceId       = sigState.pendingSourceId;
   sigState.signingNow          = false;
+  sigState.silentMode          = false;
   sigState.pendingSourceTable  = null;
   sigState.pendingSourceId     = null;
 
