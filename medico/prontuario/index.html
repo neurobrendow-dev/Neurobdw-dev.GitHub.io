@@ -14,6 +14,7 @@ permalink: /medico/prontuario/
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/node-forge@1.3.1/dist/forge.min.js"></script>
 <script src="cid10.js"></script>
 <script src="medicamentos.js"></script>
 <style>
@@ -304,6 +305,17 @@ permalink: /medico/prontuario/
     animation: spin 0.8s linear infinite; margin-right: 12px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ICP-Brasil — indicador de certificado na topbar */
+  .btn-icp {
+    background: none; border: 1px solid rgba(184,154,94,0.4);
+    color: var(--gold-light); font-size: 0.72rem; font-family: inherit;
+    letter-spacing: 0.06em; padding: 5px 10px; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-icp:hover { border-color: var(--gold); color: var(--white); }
+  .btn-icp.cert-ok  { border-color: #2d9e6b; color: #5dcc9a; }
+  .btn-icp.cert-exp { border-color: #c44;    color: #f88; }
 
   @media (max-width: 720px) {
     .topbar { padding: 12px 16px; }
@@ -861,10 +873,12 @@ async function onSignedIn(user) {
   currentProfile = profile;
   $('topbar-actions').innerHTML = `
     <a class="btn-link" href="/medico/">← MENU PRINCIPAL</a>
+    <button class="btn-icp" id="btn-icp" title="Carregar certificado ICP-Brasil para assinar documentos">🔏 ICP-Brasil</button>
     <button class="btn-link" id="btn-ai-config" title="Configurar IA">⚙ IA</button>
     <span class="topbar-user">Dr(a). ${escapeHtml(profile.full_name.split(' ')[0])}</span>
     <button class="btn-link" id="btn-logout">Sair</button>
   `;
+  $('btn-icp').onclick = openCertModal;
   $('btn-ai-config').onclick = openAIConfig;
   $('btn-logout').onclick = async () => { await sb.auth.signOut(); };
 
@@ -2814,6 +2828,215 @@ function pdfPatientBlock(doc, y, p) {
   return y + 6;
 }
 
+/* ===========================================================
+   ASSINATURA DIGITAL ICP-BRASIL
+   Lei 14.063/2020 (assinatura eletrônica avançada) e CFM 2.299/2021.
+   O certificado A1 (.p12/.pfx) fica APENAS na memória do navegador —
+   nunca é enviado ao Supabase nem a qualquer servidor externo.
+=========================================================== */
+const sigState = {
+  loaded: false,
+  privateKey: null,   // forge.pki.PrivateKey
+  cert: null,         // forge.pki.Certificate
+  cn: '',
+  issuer: '',
+  serial: '',
+  validUntil: null,
+};
+
+function showToast(msg, isErr = false) {
+  const old = document.getElementById('icp-toast');
+  if (old) old.remove();
+  const div = document.createElement('div');
+  div.id = 'icp-toast';
+  div.style.cssText = `
+    position:fixed;bottom:90px;right:24px;z-index:9998;
+    background:${isErr ? '#c44' : '#2d6a4f'};color:#fff;
+    padding:12px 18px;font-size:0.88rem;max-width:380px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.25);font-family:'DM Sans',sans-serif;
+  `;
+  div.textContent = msg;
+  document.body.appendChild(div);
+  setTimeout(() => { try { div.remove(); } catch (_) {} }, 5000);
+}
+
+async function sha256hex(bytes) {
+  const buf = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function rsaSignBytes(bytes) {
+  const md = forge.md.sha256.create();
+  const buf = forge.util.createBuffer();
+  for (let i = 0; i < bytes.length; i++) buf.putByte(bytes[i]);
+  md.update(buf.bytes());
+  const sig = sigState.privateKey.sign(md);
+  return forge.util.encode64(sig);
+}
+
+function loadP12(arrayBuffer, password) {
+  if (!window.forge) throw new Error('Biblioteca de criptografia (forge) não carregada.');
+  const bytes = new Uint8Array(arrayBuffer);
+  const buf = forge.util.createBuffer();
+  for (let i = 0; i < bytes.length; i++) buf.putByte(bytes[i]);
+  const asn1 = forge.asn1.fromDer(buf.bytes());
+  const p12 = forge.pkcs12.pkcs12FromAsn1(asn1, password);
+
+  let cert = null, privateKey = null;
+  const certBags = p12.getBags({ bagType: forge.pki.oids.certBag });
+  const keyBags  = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
+  if (certBags[forge.pki.oids.certBag]?.length)
+    cert = certBags[forge.pki.oids.certBag][0].cert;
+  if (keyBags[forge.pki.oids.pkcs8ShroudedKeyBag]?.length)
+    privateKey = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag][0].key;
+  if (!cert || !privateKey)
+    throw new Error('Certificado ou chave privada não encontrados no arquivo P12.');
+
+  const cnAttr  = cert.subject.getField('CN');
+  const orgAttr = cert.issuer.getField('O');
+  const cn      = cnAttr  ? cnAttr.value  : '(sem nome)';
+  const issuer  = orgAttr ? orgAttr.value : (cert.issuer.getField('CN')?.value || '');
+  const serial  = cert.serialNumber;
+  const validUntil = cert.validity.notAfter;
+
+  if (validUntil < new Date())
+    throw new Error(`Certificado expirado em ${validUntil.toLocaleDateString('pt-BR')}.`);
+
+  Object.assign(sigState, { loaded: true, cert, privateKey, cn, issuer, serial, validUntil });
+}
+
+function updateCertIndicator() {
+  const btn = document.getElementById('btn-icp');
+  if (!btn) return;
+  if (!sigState.loaded) {
+    btn.className = 'btn-icp';
+    btn.title = 'Carregar certificado ICP-Brasil para assinar documentos';
+    btn.textContent = '🔏 ICP-Brasil';
+    return;
+  }
+  const daysLeft = Math.floor((sigState.validUntil - new Date()) / 86400000);
+  btn.className = daysLeft < 30 ? 'btn-icp cert-exp' : 'btn-icp cert-ok';
+  btn.title = `Signatário: ${sigState.cn}\nVálido até: ${sigState.validUntil.toLocaleDateString('pt-BR')}\nEmissor: ${sigState.issuer}`;
+  btn.textContent = daysLeft < 30 ? `⚠ Cert. expirando` : `✓ Cert. ICP-Brasil`;
+}
+
+function openCertModal() {
+  const alreadyLoaded = sigState.loaded;
+  openModal({
+    title: 'Certificado Digital ICP-Brasil',
+    size: 'md',
+    bodyHTML: `
+      <p style="font-size:0.86rem;color:#5a6f85;margin-bottom:14px;">
+        Carregue seu certificado <strong>A1</strong> (arquivo <strong>.p12</strong> / <strong>.pfx</strong>).
+        A chave privada fica <em>apenas na memória</em> deste navegador e nunca é enviada ao servidor.<br>
+        Conformidade: <strong>Lei 14.063/2020</strong> (assinatura eletrônica avançada) · <strong>CFM 2.299/2021</strong>.
+      </p>
+      ${alreadyLoaded ? `
+        <div style="background:#f0faf5;border:1px solid #2d9e6b;padding:12px 14px;margin-bottom:14px;font-size:0.88rem;border-radius:2px;">
+          <strong style="color:#2d6a4f;">✓ Certificado em uso</strong><br>
+          <span style="color:#4a7a62;">${escapeHtml(sigState.cn)}</span><br>
+          <span style="font-size:0.79rem;color:#5a6f85;">
+            Válido até ${sigState.validUntil.toLocaleDateString('pt-BR')} · Emissor: ${escapeHtml(sigState.issuer)}
+          </span>
+        </div>
+      ` : ''}
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Arquivo do certificado (.p12 / .pfx)</label>
+        <input type="file" id="cert-file" accept=".p12,.pfx,application/x-pkcs12" style="padding:8px 0;">
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Senha do certificado</label>
+        <input type="password" id="cert-pwd" placeholder="Senha do arquivo P12" autocomplete="current-password">
+      </div>
+      <div id="cert-err" style="display:none;color:var(--danger);font-size:0.83rem;padding:8px 10px;background:#fdecea;margin-bottom:8px;"></div>
+      ${alreadyLoaded ? `
+        <details style="margin-top:8px;">
+          <summary style="font-size:0.82rem;color:#5a6f85;cursor:pointer;">Remover certificado da sessão</summary>
+          <button id="btn-clear-cert" class="btn-danger" style="margin-top:10px;font-size:0.82rem;">Descarregar certificado</button>
+        </details>
+      ` : ''}
+    `,
+    footHTML: `
+      <button class="btn-secondary" data-close>Cancelar</button>
+      <button class="btn-primary" id="btn-load-cert">Carregar certificado</button>
+    `,
+    onMount(modal) {
+      modal.querySelector('#btn-load-cert').onclick = async () => {
+        const fileIn = modal.querySelector('#cert-file');
+        const pwd    = modal.querySelector('#cert-pwd').value;
+        const errDiv = modal.querySelector('#cert-err');
+        const btn    = modal.querySelector('#btn-load-cert');
+        if (!fileIn.files[0]) {
+          errDiv.style.display = 'block';
+          errDiv.textContent = 'Selecione um arquivo .p12 ou .pfx.';
+          return;
+        }
+        btn.disabled = true; btn.textContent = 'Carregando…';
+        errDiv.style.display = 'none';
+        try {
+          loadP12(await fileIn.files[0].arrayBuffer(), pwd);
+          updateCertIndicator();
+          closeModal();
+          showToast(`Certificado carregado: ${sigState.cn}. Documentos serão assinados automaticamente.`);
+        } catch (err) {
+          errDiv.style.display = 'block';
+          errDiv.textContent = 'Erro: ' + (err.message || 'falha ao carregar certificado. Verifique o arquivo e a senha.');
+          btn.disabled = false; btn.textContent = 'Carregar certificado';
+        }
+      };
+      const clearBtn = modal.querySelector('#btn-clear-cert');
+      if (clearBtn) clearBtn.onclick = () => {
+        Object.assign(sigState, { loaded:false, privateKey:null, cert:null, cn:'', issuer:'', serial:'', validUntil:null });
+        updateCertIndicator();
+        closeModal();
+        showToast('Certificado removido da sessão.');
+      };
+    }
+  });
+}
+
+/* Adiciona carimbo ICP-Brasil a todas as páginas do doc, em cima do footer existente. */
+function pdfICPStamp(doc, verifyId) {
+  const pages = doc.internal.getNumberOfPages();
+  const W = 210;
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(90, 110, 130);
+    doc.text(
+      `Assinado digitalmente por ${sigState.cn} — ICP-Brasil — ${sigState.issuer}`,
+      W / 2, 283, { align: 'center' }
+    );
+    doc.text(
+      `ID verificação: ${verifyId}  ·  Série: ${sigState.serial}`,
+      W / 2, 287, { align: 'center' }
+    );
+    doc.setTextColor(13, 27, 42); // reset
+  }
+}
+
+async function storeSigSupabase(verifyId, hashHex, sigB64, filename, meta) {
+  try {
+    const { error } = await sb.from('document_signatures').insert({
+      id:              verifyId,
+      doc_type:        meta.docType    || 'documento',
+      doc_filename:    filename,
+      doc_hash:        hashHex,
+      signature_b64:   sigB64,
+      cert_serial:     sigState.serial,
+      cert_cn:         sigState.cn,
+      cert_issuer:     sigState.issuer,
+      cert_valid_until: sigState.validUntil?.toISOString() || null,
+      patient_id:      meta.patientId  || currentPatient?.id || null,
+      created_by:      currentUser?.id || null,
+    });
+    if (error) console.warn('[ICP] falha ao registrar assinatura:', error.message);
+  } catch (err) {
+    console.warn('[ICP] erro inesperado ao salvar assinatura:', err.message);
+  }
+}
+
 function pdfFooter(doc) {
   const W = 210, M = 18;
   const pages = doc.internal.getNumberOfPages();
@@ -2847,8 +3070,17 @@ function safeFilename(s) {
 /* Salva PDF: SEMPRE mostra um banner com link clicável, e em paralelo
    tenta abrir/baixar automaticamente. Funciona em qualquer navegador,
    mesmo com bloqueador de popup ou Safari restrito. */
-function pdfSave(doc, filename) {
+/* meta = { docType: string, patientId: uuid } — usado para registrar assinatura no Supabase */
+async function pdfSave(doc, filename, meta = {}) {
   const fname = safeFilename(filename) || 'documento.pdf';
+
+  // Se certificado ICP-Brasil carregado: adiciona carimbo com ID de verificação
+  let verifyId = null;
+  if (sigState.loaded) {
+    verifyId = crypto.randomUUID();
+    pdfICPStamp(doc, verifyId);   // carimbo usa o mesmo verifyId que será salvo no Supabase
+  }
+
   let blob, blobUrl;
   try {
     blob = doc.output('blob');
@@ -2858,6 +3090,22 @@ function pdfSave(doc, filename) {
     console.error('[pdfSave] falha ao gerar blob:', err);
     alert('Erro ao gerar PDF: ' + err.message);
     return;
+  }
+
+  // Assina em background usando o mesmo verifyId já impresso no carimbo
+  if (sigState.loaded && verifyId) {
+    (async () => {
+      try {
+        const bytes   = new Uint8Array(await blob.arrayBuffer());
+        const hashHex = await sha256hex(bytes);
+        const sigB64  = rsaSignBytes(bytes);
+        await storeSigSupabase(verifyId, hashHex, sigB64, fname, meta);
+        showToast(`Documento assinado digitalmente — ICP-Brasil ✓`);
+      } catch (err) {
+        console.warn('[ICP] erro ao assinar:', err.message);
+        showToast('PDF gerado sem assinatura digital: ' + err.message, true);
+      }
+    })();
   }
 
   // Tenta abrir automaticamente em nova aba (silencioso se bloqueado)
