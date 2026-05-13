@@ -47,7 +47,7 @@ A decisão costuma considerar:
 - Facilidade de tomar o remédio corretamente
 - Disponibilidade no SUS, plano de saúde ou rede privada
 
-O objetivo ideal é simples: **controle completo das crises com o mínimo de efeitos adversos**.
+O objetivo ideal é: **controle completo das crises com o mínimo de efeitos adversos**.
 
 ## Levetiracetam
 
