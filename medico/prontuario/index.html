@@ -493,6 +493,7 @@ permalink: /medico/prontuario/
           <div class="desc">Relatório clínico geral</div>
         </button>
       </div>
+      <div id="d-pending-sigs"></div>
       <h4 class="section-title">Histórico de documentos</h4>
       <div id="d-docs"></div>
     </div>
@@ -1235,6 +1236,7 @@ $('tabs').addEventListener('click', e => {
 function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === name));
+  if (name === 'documentos') renderPendingSignatures();
 }
 
 /* ===========================================================
@@ -1247,27 +1249,37 @@ function renderConsults() {
   }
   const TYPES = { primeira:'Primeira consulta', retorno:'Retorno', urgencia:'Urgência', teleconsulta:'Teleconsulta' };
   setHTML('d-consults', currentConsults.map(c => {
+    const signed = !!c.is_signed;
     const cids = (c.cid_codes || []).map(x => `<span class="cid-tag">${escapeHtml(x)}</span>`).join(' ');
     const summary = [
       c.chief_complaint ? `<strong>QP:</strong> ${escapeHtml(c.chief_complaint)}` : null,
       c.hypothesis ? `<strong>HD:</strong> ${escapeHtml(c.hypothesis)}` : null,
       c.plan ? `<strong>Conduta:</strong> ${escapeHtml(c.plan).slice(0,200)}${c.plan.length>200?'…':''}` : null
     ].filter(Boolean).join('<br>');
+    const signedAt = c.signed_at ? ` · Assinado em ${fmtDate(c.signed_at)}` : '';
+    const sigBadge = signed
+      ? `<span style="font-size:0.7rem;background:#f0faf5;color:#2d6a4f;border:1px solid #a0d4b8;padding:2px 7px;" title="Assinado digitalmente${signedAt}">✓ assinado</span>`
+      : `<span style="font-size:0.7rem;background:#fff8e6;color:#8a5c00;border:1px solid #f0d080;padding:2px 7px;">pendente</span>`;
+    const signBtn = !signed && sigState.loaded
+      ? `<button class="btn-ghost" data-act="sign" style="color:var(--steel);border:1px solid var(--steel);padding:4px 8px;">🔏 Assinar</button>`
+      : '';
     return `
-      <div class="consult-card" data-id="${c.id}">
+      <div class="consult-card" data-id="${c.id}" data-signed="${signed}">
         <div class="consult-head">
           <div>
             <span class="consult-date">${fmtDateTime(c.consultation_date)}</span>
             <span class="consult-type">${TYPES[c.type] || c.type}</span>
+            ${sigBadge}
           </div>
           <div class="cid-row">${cids}</div>
         </div>
         <div class="consult-body">${summary || '<em>Sem dados estruturados.</em>'}</div>
         <div class="consult-actions">
           <button class="btn-ghost" data-act="view">Ver completa</button>
-          <button class="btn-ghost" data-act="edit">Editar</button>
+          ${!signed ? `<button class="btn-ghost" data-act="edit">Editar</button>` : `<span style="font-size:0.75rem;color:var(--gray);padding:0 4px;" title="Consulta assinada — edição bloqueada">🔒</span>`}
           <button class="btn-ghost" data-act="pdf">PDF</button>
-          <button class="btn-ghost" data-act="del" style="color:var(--danger)">Excluir</button>
+          ${signBtn}
+          ${!signed ? `<button class="btn-ghost" data-act="del" style="color:var(--danger)">Excluir</button>` : ''}
         </div>
       </div>`;
   }).join(''));
@@ -1275,9 +1287,19 @@ function renderConsults() {
     const id = card.dataset.id;
     const c = currentConsults.find(x => x.id === id);
     card.querySelector('[data-act="view"]').onclick = () => viewConsult(c);
-    card.querySelector('[data-act="edit"]').onclick = () => openConsultForm(c);
+    const editBtn = card.querySelector('[data-act="edit"]');
+    if (editBtn) editBtn.onclick = () => openConsultForm(c);
     card.querySelector('[data-act="pdf"]').onclick = () => generateConsultPDF(c);
-    card.querySelector('[data-act="del"]').onclick = async () => {
+    const signBtn = card.querySelector('[data-act="sign"]');
+    if (signBtn) signBtn.onclick = () => {
+      if (!sigState.loaded) { openCertModal(); return; }
+      sigState.signingNow = true;
+      sigState.pendingSourceTable = 'emr_consultations';
+      sigState.pendingSourceId = c.id;
+      generateConsultPDF(c);
+    };
+    const delBtn = card.querySelector('[data-act="del"]');
+    if (delBtn) delBtn.onclick = async () => {
       if (!confirm('Excluir esta consulta?')) return;
       const { error } = await sb.from('emr_consultations').delete().eq('id', id);
       if (error) return alertErr(error);
@@ -2074,6 +2096,7 @@ function openHIT6(onApply) {
 function renderDocs() {
   if (!currentDocs.length) {
     setHTML('d-docs', `<div class="empty-state">Nenhum documento emitido.</div>`);
+    renderPendingSignatures();
     return;
   }
   const TYPE_LABELS = {
@@ -2081,28 +2104,147 @@ function renderDocs() {
     exames:'Solicitação de exames', atestado:'Atestado',
     laudo:'Laudo', relatorio:'Relatório'
   };
-  setHTML('d-docs', currentDocs.map(d => `
-    <div class="doc-row" data-id="${d.id}">
+  setHTML('d-docs', currentDocs.map(d => {
+    const signed = !!d.is_signed;
+    const signedAt = d.signed_at ? ` · Assinado em ${fmtDate(d.signed_at)}` : '';
+    const signBtn = !signed && sigState.loaded
+      ? `<button class="btn-ghost" data-act="sign" style="color:var(--steel);border:1px solid var(--steel);padding:4px 8px;">🔏 Assinar</button>`
+      : '';
+    const pendingBadge = !signed
+      ? `<span style="font-size:0.7rem;background:#fff8e6;color:#8a5c00;border:1px solid #f0d080;padding:2px 7px;margin-left:6px;">pendente</span>`
+      : `<span style="font-size:0.7rem;background:#f0faf5;color:#2d6a4f;border:1px solid #a0d4b8;padding:2px 7px;margin-left:6px;" title="Assinado digitalmente${signedAt}">✓ assinado</span>`;
+    return `
+    <div class="doc-row" data-id="${d.id}" data-signed="${signed}">
       <div class="doc-date">${fmtDate(d.issue_date)}</div>
-      <div><span class="doc-type-badge ${d.type}">${TYPE_LABELS[d.type] || d.type}</span></div>
+      <div><span class="doc-type-badge ${d.type}">${TYPE_LABELS[d.type] || d.type}</span>${pendingBadge}</div>
       <div>${escapeHtml(d.title || '—')}</div>
       <div class="doc-actions">
-        <button class="btn-ghost" data-act="edit">Editar</button>
+        ${!signed ? `<button class="btn-ghost" data-act="edit">Editar</button>` : `<span style="font-size:0.75rem;color:var(--gray);padding:0 4px;" title="Documento assinado — edição bloqueada">🔒</span>`}
         <button class="btn-ghost" data-act="pdf">PDF</button>
-        <button class="btn-ghost" data-act="del" style="color:var(--danger)">Excluir</button>
+        ${signBtn}
+        ${!signed ? `<button class="btn-ghost" data-act="del" style="color:var(--danger)">Excluir</button>` : ''}
       </div>
-    </div>`).join(''));
+    </div>`;
+  }).join(''));
   document.querySelectorAll('#d-docs .doc-row').forEach(row => {
     const id = row.dataset.id;
     const d = currentDocs.find(x => x.id === id);
-    row.querySelector('[data-act="edit"]').onclick = () => openDocForm(d.type, d);
+    const editBtn = row.querySelector('[data-act="edit"]');
+    if (editBtn) editBtn.onclick = () => openDocForm(d.type, d);
     row.querySelector('[data-act="pdf"]').onclick = () => generateDocPDF(d);
-    row.querySelector('[data-act="del"]').onclick = async () => {
+    const signBtn = row.querySelector('[data-act="sign"]');
+    if (signBtn) signBtn.onclick = () => {
+      if (!sigState.loaded) { openCertModal(); return; }
+      sigState.signingNow = true;
+      sigState.pendingSourceTable = 'emr_documents';
+      sigState.pendingSourceId = d.id;
+      generateDocPDF(d);
+    };
+    const delBtn = row.querySelector('[data-act="del"]');
+    if (delBtn) delBtn.onclick = async () => {
       if (!confirm('Excluir este documento?')) return;
       const { error } = await sb.from('emr_documents').delete().eq('id', id);
       if (error) return alertErr(error);
       currentDocs = currentDocs.filter(x => x.id !== id);
       renderDocs(); renderSummary();
+    };
+  });
+  renderPendingSignatures();
+}
+
+/* Seção "Pendentes de assinatura" no topo do tab Documentos.
+   Mostra documentos E consultas sem assinatura para o paciente atual. */
+function renderPendingSignatures() {
+  const container = document.getElementById('d-pending-sigs');
+  if (!container) return;
+
+  const pendingDocs     = (currentDocs     || []).filter(d => !d.is_signed);
+  const pendingConsults = (currentConsults || []).filter(c => !c.is_signed);
+  const total = pendingDocs.length + pendingConsults.length;
+
+  if (!total) { container.innerHTML = ''; return; }
+
+  const TYPE_LABELS = {
+    receita_simples:'Receita simples', receita_especial:'Receita especial',
+    exames:'Solicitação de exames', atestado:'Atestado', laudo:'Laudo', relatorio:'Relatório',
+  };
+  const CONSULT_TYPES = { primeira:'Primeira consulta', retorno:'Retorno', urgencia:'Urgência', teleconsulta:'Teleconsulta' };
+
+  const certTip = sigState.loaded
+    ? ''
+    : `<p style="font-size:0.8rem;color:#8a5c00;margin-top:8px;">
+        Carregue seu <button class="btn-link" id="btn-load-cert-pending" style="color:#8a5c00;text-decoration:underline;font-size:inherit;">certificado ICP-Brasil</button>
+        para habilitar o botão Assinar.
+       </p>`;
+
+  const docRows = pendingDocs.map(d => `
+    <div class="doc-row" data-id="${d.id}" data-kind="doc" style="background:#fffef5;">
+      <div class="doc-date">${fmtDate(d.issue_date)}</div>
+      <div><span class="doc-type-badge ${d.type}">${TYPE_LABELS[d.type] || d.type}</span></div>
+      <div>${escapeHtml(d.title || '—')}</div>
+      <div class="doc-actions">
+        <button class="btn-ghost" data-act="pdf">PDF</button>
+        ${sigState.loaded ? `<button class="btn-ghost" data-act="sign" style="color:var(--steel);border:1px solid var(--steel);padding:4px 8px;">🔏 Assinar</button>` : ''}
+      </div>
+    </div>`).join('');
+
+  const consultRows = pendingConsults.map(c => `
+    <div class="doc-row" data-id="${c.id}" data-kind="consult" style="background:#fffef5;">
+      <div class="doc-date">${fmtDate(c.consultation_date)}</div>
+      <div><span class="doc-type-badge">${CONSULT_TYPES[c.type] || c.type}</span></div>
+      <div>${escapeHtml(c.chief_complaint || c.hypothesis || '—').slice(0,80)}</div>
+      <div class="doc-actions">
+        <button class="btn-ghost" data-act="pdf">PDF</button>
+        ${sigState.loaded ? `<button class="btn-ghost" data-act="sign" style="color:var(--steel);border:1px solid var(--steel);padding:4px 8px;">🔏 Assinar</button>` : ''}
+      </div>
+    </div>`).join('');
+
+  container.innerHTML = `
+    <div style="border:1px solid #f0d080;background:#fffbea;padding:14px 16px;margin-bottom:18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <strong style="color:#8a5c00;font-size:0.88rem;letter-spacing:0.04em;">
+          ⏳ PENDENTES DE ASSINATURA (${total})
+        </strong>
+      </div>
+      ${certTip}
+      ${docRows}${consultRows}
+    </div>`;
+
+  // Botão para abrir modal do cert caso não carregado
+  const certLink = container.querySelector('#btn-load-cert-pending');
+  if (certLink) certLink.onclick = openCertModal;
+
+  // Bind de ações
+  container.querySelectorAll('.doc-row').forEach(row => {
+    const id   = row.dataset.id;
+    const kind = row.dataset.kind;
+    row.querySelector('[data-act="pdf"]').onclick = () => {
+      if (kind === 'doc') {
+        const d = currentDocs.find(x => x.id === id);
+        if (d) generateDocPDF(d);
+      } else {
+        const c = currentConsults.find(x => x.id === id);
+        if (c) generateConsultPDF(c);
+      }
+    };
+    const signBtn = row.querySelector('[data-act="sign"]');
+    if (signBtn) signBtn.onclick = () => {
+      if (!sigState.loaded) { openCertModal(); return; }
+      if (kind === 'doc') {
+        const d = currentDocs.find(x => x.id === id);
+        if (!d) return;
+        sigState.signingNow = true;
+        sigState.pendingSourceTable = 'emr_documents';
+        sigState.pendingSourceId = d.id;
+        generateDocPDF(d);
+      } else {
+        const c = currentConsults.find(x => x.id === id);
+        if (!c) return;
+        sigState.signingNow = true;
+        sigState.pendingSourceTable = 'emr_consultations';
+        sigState.pendingSourceId = c.id;
+        generateConsultPDF(c);
+      }
     };
   });
 }
@@ -2842,6 +2984,10 @@ const sigState = {
   issuer: '',
   serial: '',
   validUntil: null,
+  // flags de assinatura explícita (setados pelo botão "Assinar")
+  signingNow: false,
+  pendingSourceTable: null,
+  pendingSourceId: null,
 };
 
 function showToast(msg, isErr = false) {
@@ -2996,40 +3142,59 @@ function openCertModal() {
 }
 
 /* Adiciona carimbo ICP-Brasil a todas as páginas do doc, em cima do footer existente. */
+/* Carimbo ICP-Brasil no PDF.
+   - Portrait: adiciona 2 linhas de texto entre o CRM e a info de página do rodapé.
+   - Landscape (receita especial): adiciona uma linha compacta no rodapé da página inteira,
+     fora das vias, pois o formulário tem layout regulamentado (Portaria 344/98). */
 function pdfICPStamp(doc, verifyId) {
   const pages = doc.internal.getNumberOfPages();
-  const W = 210;
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
+    const pgW = doc.internal.pageSize.getWidth();
+    const pgH = doc.internal.pageSize.getHeight();
+    const isLandscape = pgW > pgH;
+
     doc.setFontSize(6.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(90, 110, 130);
-    doc.text(
-      `Assinado digitalmente por ${sigState.cn} — ICP-Brasil — ${sigState.issuer}`,
-      W / 2, 283, { align: 'center' }
-    );
-    doc.text(
-      `ID verificação: ${verifyId}  ·  Série: ${sigState.serial}`,
-      W / 2, 287, { align: 'center' }
-    );
-    doc.setTextColor(13, 27, 42); // reset
+
+    if (isLandscape) {
+      // Rodapé compacto centralizado abaixo das vias (landscape A4: H=210)
+      doc.text(
+        `Assinado digitalmente — ICP-Brasil — ${sigState.cn} — ID: ${verifyId}`,
+        pgW / 2, pgH - 3, { align: 'center' }
+      );
+    } else {
+      // Portrait: 2 linhas entre CRM (y=278) e info de página (y=294 quando assinando)
+      doc.text(
+        `Assinado digitalmente por ${sigState.cn} — ICP-Brasil — ${sigState.issuer}`,
+        pgW / 2, 283, { align: 'center' }
+      );
+      doc.text(
+        `ID verificação: ${verifyId}  ·  Série: ${sigState.serial}`,
+        pgW / 2, 287, { align: 'center' }
+      );
+    }
+    doc.setTextColor(13, 27, 42);
   }
 }
 
 async function storeSigSupabase(verifyId, hashHex, sigB64, filename, meta) {
   try {
     const { error } = await sb.from('document_signatures').insert({
-      id:              verifyId,
-      doc_type:        meta.docType    || 'documento',
-      doc_filename:    filename,
-      doc_hash:        hashHex,
-      signature_b64:   sigB64,
-      cert_serial:     sigState.serial,
-      cert_cn:         sigState.cn,
-      cert_issuer:     sigState.issuer,
+      id:               verifyId,
+      doc_type:         meta.docType      || 'documento',
+      doc_filename:     filename,
+      doc_hash:         hashHex,
+      signature_b64:    sigB64,
+      cert_serial:      sigState.serial,
+      cert_cn:          sigState.cn,
+      cert_issuer:      sigState.issuer,
       cert_valid_until: sigState.validUntil?.toISOString() || null,
-      patient_id:      meta.patientId  || currentPatient?.id || null,
-      created_by:      currentUser?.id || null,
+      patient_id:       meta.patientId    || currentPatient?.id || null,
+      source_table:     meta.sourceTable  || null,
+      source_id:        meta.sourceId     || null,
+      created_by:       currentUser?.id   || null,
     });
     if (error) console.warn('[ICP] falha ao registrar assinatura:', error.message);
   } catch (err) {
@@ -3037,12 +3202,14 @@ async function storeSigSupabase(verifyId, hashHex, sigB64, filename, meta) {
   }
 }
 
+/* pdfFooter: quando sigState.signingNow=true, a info de página desce para y=294
+   para abrir espaço ao carimbo ICP (y=283/287). */
 function pdfFooter(doc) {
   const W = 210, M = 18;
   const pages = doc.internal.getNumberOfPages();
+  const yPageInfo = sigState.signingNow ? 294 : 290;
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
-    // assinatura
     doc.setDrawColor(13, 27, 42);
     doc.setLineWidth(0.4);
     doc.line(W / 2 - 38, 268, W / 2 + 38, 268);
@@ -3053,7 +3220,7 @@ function pdfFooter(doc) {
     doc.setTextColor(80, 95, 115);
     doc.text(`${DOCTOR_TITLE} — ${DOCTOR_CRM}${DOCTOR_RQE ? ' / ' + DOCTOR_RQE : ''}`, W / 2, 278, { align: 'center' });
     doc.setTextColor(138, 155, 176);
-    doc.text(`${docCity()}, ${todayBR()}  ·  Página ${i}/${pages}`, W / 2, 290, { align: 'center' });
+    doc.text(`${docCity()}, ${todayBR()}  ·  Página ${i}/${pages}`, W / 2, yPageInfo, { align: 'center' });
   }
 }
 
@@ -3067,18 +3234,24 @@ function safeFilename(s) {
     .slice(0, 120);
 }
 
-/* Salva PDF: SEMPRE mostra um banner com link clicável, e em paralelo
-   tenta abrir/baixar automaticamente. Funciona em qualquer navegador,
-   mesmo com bloqueador de popup ou Safari restrito. */
-/* meta = { docType: string, patientId: uuid } — usado para registrar assinatura no Supabase */
-async function pdfSave(doc, filename, meta = {}) {
+/* Gera e baixa o PDF. Quando sigState.signingNow=true (botão "Assinar" clicado),
+   aplica o carimbo ICP-Brasil, assina criptograficamente e registra no Supabase.
+   O download acontece imediatamente; a assinatura/registro ocorre em background. */
+async function pdfSave(doc, filename) {
+  // Captura e limpa flags de assinatura imediatamente (evita vazamento entre chamadas)
+  const shouldSign     = sigState.signingNow;
+  const sourceTable    = sigState.pendingSourceTable;
+  const sourceId       = sigState.pendingSourceId;
+  sigState.signingNow          = false;
+  sigState.pendingSourceTable  = null;
+  sigState.pendingSourceId     = null;
+
   const fname = safeFilename(filename) || 'documento.pdf';
 
-  // Se certificado ICP-Brasil carregado: adiciona carimbo com ID de verificação
   let verifyId = null;
-  if (sigState.loaded) {
+  if (shouldSign) {
     verifyId = crypto.randomUUID();
-    pdfICPStamp(doc, verifyId);   // carimbo usa o mesmo verifyId que será salvo no Supabase
+    pdfICPStamp(doc, verifyId);
   }
 
   let blob, blobUrl;
@@ -3092,40 +3265,50 @@ async function pdfSave(doc, filename, meta = {}) {
     return;
   }
 
-  // Assina em background usando o mesmo verifyId já impresso no carimbo
-  if (sigState.loaded && verifyId) {
+  // Download imediato — não espera a assinatura
+  try { window.open(blobUrl, '_blank', 'noopener,noreferrer'); } catch (_) {}
+  try {
+    const a = document.createElement('a');
+    a.href = blobUrl; a.download = fname; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { try { a.remove(); } catch (_) {} }, 500);
+  } catch (_) {}
+  showPdfBanner(blobUrl, fname);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
+
+  // Assinatura e registro em background
+  if (shouldSign && verifyId) {
     (async () => {
       try {
         const bytes   = new Uint8Array(await blob.arrayBuffer());
         const hashHex = await sha256hex(bytes);
         const sigB64  = rsaSignBytes(bytes);
-        await storeSigSupabase(verifyId, hashHex, sigB64, fname, meta);
-        showToast(`Documento assinado digitalmente — ICP-Brasil ✓`);
+        await storeSigSupabase(verifyId, hashHex, sigB64, fname, {
+          sourceTable, sourceId,
+          patientId: currentPatient?.id,
+        });
+        // Marca o registro de origem como assinado
+        if (sourceTable && sourceId) {
+          await sb.from(sourceTable)
+            .update({ is_signed: true, signed_at: new Date().toISOString() })
+            .eq('id', sourceId);
+          if (sourceTable === 'emr_documents') {
+            const d = currentDocs.find(x => x.id === sourceId);
+            if (d) { d.is_signed = true; d.signed_at = new Date().toISOString(); }
+            renderDocs(); renderPendingSignatures();
+          } else if (sourceTable === 'emr_consultations') {
+            const c = currentConsults.find(x => x.id === sourceId);
+            if (c) { c.is_signed = true; c.signed_at = new Date().toISOString(); }
+            renderConsults(); renderPendingSignatures();
+          }
+        }
+        showToast(`Documento assinado — ICP-Brasil ✓`);
       } catch (err) {
         console.warn('[ICP] erro ao assinar:', err.message);
-        showToast('PDF gerado sem assinatura digital: ' + err.message, true);
+        showToast('PDF gerado, mas assinatura falhou: ' + err.message, true);
       }
     })();
   }
-
-  // Tenta abrir automaticamente em nova aba (silencioso se bloqueado)
-  try { window.open(blobUrl, '_blank', 'noopener,noreferrer'); } catch (_) {}
-  // Tenta forçar download via <a download> (Chrome/Firefox)
-  try {
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = fname;
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { try { a.remove(); } catch (_) {} }, 500);
-  } catch (_) {}
-
-  // SEMPRE mostra um banner ancorado com link clicável. Garantido funcionar.
-  showPdfBanner(blobUrl, fname);
-
-  // Limpa o URL depois de muito tempo (usuário pode demorar a clicar)
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 5 * 60 * 1000);
 }
 
 function showPdfBanner(url, filename) {
