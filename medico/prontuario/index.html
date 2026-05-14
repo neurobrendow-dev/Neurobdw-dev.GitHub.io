@@ -136,12 +136,22 @@ permalink: /medico/prontuario/
     border: 1px solid #d0dae6; outline: none; font-size: 0.9rem; background: #fff;
   }
   .filters input:focus { border-color: var(--gold); }
-  .filters select {
-    padding: 10px 14px; border: 1px solid #d0dae6; outline: none;
-    font-size: 0.9rem; background: #fff; font-family: inherit; color: var(--navy);
-    min-width: 190px; cursor: pointer;
+  /* Location bar (convênio/local de atendimento) */
+  .location-bar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding-bottom: 14px; border-bottom: 1px solid #eaeff5; margin-bottom: 16px;
   }
-  .filters select:focus { border-color: var(--gold); }
+  .location-label {
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--gray); font-weight: 600; white-space: nowrap;
+  }
+  .loc-chip {
+    padding: 6px 16px; border: 1px solid #d0dae6; background: #fff;
+    font-size: 0.84rem; font-family: inherit; color: var(--navy);
+    cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .loc-chip:hover { border-color: var(--gold); }
+  .loc-chip.active { background: var(--navy); color: #fff; border-color: var(--navy); }
 
   /* Patient list */
   .patients-table { width: 100%; border-collapse: collapse; }
@@ -366,11 +376,10 @@ permalink: /medico/prontuario/
       <button class="btn-primary" id="btn-new-patient">+ Novo paciente</button>
     </div>
 
+    <div id="location-bar" class="location-bar"></div>
+
     <div class="filters">
       <input type="search" id="search-input" placeholder="Buscar por nome, CPF ou telefone...">
-      <select id="filter-plan">
-        <option value="">Todos os convênios</option>
-      </select>
     </div>
 
     <div id="patients-container">
@@ -573,17 +582,28 @@ async function loadHealthPlansDB() {
     return;
   }
   healthPlans = data || [];
-  populatePlanFilter();
+  populateLocationBar();
 }
 
-function populatePlanFilter() {
-  const sel = document.getElementById('filter-plan');
-  if (!sel) return;
-  const prev = sel.value;
-  sel.innerHTML = '<option value="">Todos os convênios</option>' +
-    '<option value="__particular__">Particular / Nenhum</option>' +
-    healthPlans.map(hp => `<option value="${escapeHtml(hp.name)}">${escapeHtml(hp.name)}</option>`).join('');
-  if (prev) sel.value = prev;
+let activePlan = '';
+
+function populateLocationBar() {
+  const bar = document.getElementById('location-bar');
+  if (!bar) return;
+  bar.innerHTML = `
+    <span class="location-label">Atendendo em</span>
+    <button class="loc-chip ${activePlan === '' ? 'active' : ''}" data-plan="">Todos</button>
+    ${healthPlans.map(hp => `
+      <button class="loc-chip ${activePlan === hp.name ? 'active' : ''}" data-plan="${escapeHtml(hp.name)}">${escapeHtml(hp.name)}</button>
+    `).join('')}
+  `;
+  bar.querySelectorAll('.loc-chip').forEach(btn => {
+    btn.onclick = () => {
+      activePlan = btn.dataset.plan;
+      populateLocationBar();
+      applyPatientFilters();
+    };
+  });
 }
 
 function buildHealthPlanOptions(currentValue) {
@@ -986,26 +1006,19 @@ function renderPatients(list) {
 }
 
 function applyPatientFilters() {
-  const q    = ($('search-input').value || '').trim().toLowerCase();
-  const plan = ($('filter-plan')?.value || '');
+  const q = ($('search-input').value || '').trim().toLowerCase();
   let list = allPatients;
   if (q) list = list.filter(p =>
     (p.full_name || '').toLowerCase().includes(q) ||
     (p.cpf || '').toLowerCase().includes(q) ||
     (p.phone || '').toLowerCase().includes(q));
-  if (plan === '__particular__') list = list.filter(p => !p.health_plan);
-  else if (plan) list = list.filter(p => p.health_plan === plan);
+  if (activePlan) list = list.filter(p => p.health_plan === activePlan);
   renderPatients(list);
 }
 
 $('search-input').oninput = applyPatientFilters;
-$('filter-plan').onchange = applyPatientFilters;
 
-$('btn-new-patient').onclick = () => {
-  const plan = $('filter-plan')?.value || '';
-  const preset = (plan && plan !== '__particular__') ? plan : '';
-  openPatientForm(null, preset);
-};
+$('btn-new-patient').onclick = () => openPatientForm(null, activePlan || '');
 
 /* ===========================================================
    FORM DE PACIENTE (criar/editar)
