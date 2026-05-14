@@ -161,10 +161,44 @@
     .no-id h2 { font-size: 1rem; margin-bottom: 8px; }
     .no-id p { font-size: 0.84rem; color: var(--gray); }
 
+    /* Search form */
+    .search-form {
+      max-width: 600px;
+      width: 100%;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 8px;
+    }
+    .search-form input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid #c8d4e4;
+      font-size: 0.88rem;
+      font-family: 'Courier New', monospace;
+      color: var(--navy);
+      background: var(--white);
+      outline: none;
+    }
+    .search-form input:focus { border-color: var(--steel); }
+    .search-form input::placeholder { font-family: 'Segoe UI', sans-serif; color: var(--gray); }
+    .search-form button {
+      padding: 10px 20px;
+      background: var(--navy);
+      color: var(--white);
+      border: none;
+      font-size: 0.88rem;
+      font-family: inherit;
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+    .search-form button:hover { background: var(--steel); }
+
     @media (max-width: 480px) {
       .fields { padding: 18px 16px; }
       .status-banner { padding: 16px; }
       .card-footer { padding: 12px 16px; }
+      .search-form { flex-direction: column; }
     }
   </style>
 </head>
@@ -177,6 +211,11 @@
   <div class="gold-line"></div>
   <div class="header-brand">Verificação de Assinatura Digital</div>
 </div>
+
+<form class="search-form" id="search-form">
+  <input type="text" id="id-input" placeholder="Cole ou digite o ID de verificação do documento…" autocomplete="off" spellcheck="false">
+  <button type="submit">Verificar</button>
+</form>
 
 <div id="root"></div>
 
@@ -326,9 +365,13 @@
       </div>`;
   }
 
-  async function verify() {
+  async function verify(idOverride) {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get('id');
+    const id = idOverride || params.get('id');
+
+    // Pre-populate input if URL has an id
+    const input = document.getElementById('id-input');
+    if (input && params.get('id') && !idOverride) input.value = params.get('id');
 
     if (!id) { renderNoId(); return; }
 
@@ -347,6 +390,16 @@
 
     renderValid(data);
   }
+
+  document.getElementById('search-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const val = document.getElementById('id-input').value.trim();
+    if (!val) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('id', val);
+    window.history.pushState({}, '', url.toString());
+    verify(val);
+  });
 
   verify();
 </script>
