@@ -880,7 +880,7 @@ async function onSignedIn(user) {
     <button class="btn-icp" id="btn-icp" title="Carregar certificado ICP-Brasil para assinar documentos">🔏 ICP-Brasil</button>
     <label id="lbl-solo-elet" title="Documentos conterão apenas assinatura eletrônica — carimbo fica acima da linha de assinatura" style="display:inline-flex;align-items:center;gap:5px;font-size:0.72rem;color:rgba(200,216,232,0.7);cursor:pointer;letter-spacing:0.04em;user-select:none;">
       <input type="checkbox" id="chk-solo-elet" style="accent-color:#b89a5e;width:13px;height:13px;cursor:pointer;" ${sigState.soloElectronic ? 'checked' : ''}>
-      Só assinatura eletrônica
+      Apenas assinatura eletrônica
     </label>
     <button class="btn-link" id="btn-ai-config" title="Configurar IA">⚙ IA</button>
     <span class="topbar-user">Dr(a). ${escapeHtml(profile.full_name.split(' ')[0])}</span>
