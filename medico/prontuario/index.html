@@ -3645,7 +3645,7 @@ async function pdfICPStamp(doc, verifyId) {
 
       doc.setFontSize(5.8);
       doc.setTextColor(40, 80, 150);
-      doc.text('O documento poderá ser validado em: https://validar.iti.gov.br', txX, ty); ty += lh;
+      doc.text('O documento poderá ser validado no QR Code ao lado:', txX, ty); ty += lh;
       doc.setTextColor(60, 90, 115);
       doc.text(`ID de verificação: ${verifyId}`, txX, ty);
 
