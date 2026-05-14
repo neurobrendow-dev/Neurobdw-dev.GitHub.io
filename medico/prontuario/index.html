@@ -3545,9 +3545,6 @@ function openCertModal() {
    - Portrait: selo visual completo (badge + texto + QR code) entre CRM e info de página.
    - Landscape (receita especial): linha compacta no rodapé, pois o formulário é regulamentado. */
 async function pdfICPStamp(doc, verifyId) {
-  // Gera QR code apontando para o portal oficial de validação ITI (síncrono)
-  const qrDataUrl = generateQRDataUrl('https://validar.iti.gov.br/');
-
   const pages = doc.internal.getNumberOfPages();
 
   for (let i = 1; i <= pages; i++) {
@@ -3622,8 +3619,8 @@ async function pdfICPStamp(doc, verifyId) {
       doc.line(bX + bdW + 0.8, bY + 2, bX + bdW + 0.8, bY + sH - 2);
       doc.line(qrX - 2, bY + 2, qrX - 2, bY + sH - 2);
 
-      // QR code desenhado diretamente como vetores (sem canvas/addImage)
-      drawQRCodeInPDF(doc, 'https://validar.iti.gov.br/', qrX, bY + 0.5, qrS - 1);
+      // QR code aponta para a página de verificação com o ID único do documento
+      drawQRCodeInPDF(doc, `https://neurobrendow.com.br/medico/verificar/?id=${verifyId}`, qrX, bY + 0.5, qrS - 1);
 
       // Texto descritivo — usa dados do replay ou dados atuais; limpa CPF do CN
       const replay = sigState.replayStamp;
