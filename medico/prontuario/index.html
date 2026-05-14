@@ -3403,28 +3403,30 @@ function autoLoadCert() {
   }
 }
 
-/* Gera QR code como data URL PNG usando qrcode-generator (síncrono, sem deps extras). */
-function generateQRDataUrl(text) {
+/* Desenha QR code diretamente no jsPDF como retângulos vetoriais.
+   Evita canvas/addImage — funciona em qualquer contexto. */
+function drawQRCodeInPDF(doc, text, x, y, size) {
   try {
     const qr = qrcode(0, 'M');
     qr.addData(text);
     qr.make();
-    const cell = 4, margin = 8;
     const n = qr.getModuleCount();
-    const size = n * cell + margin * 2;
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = '#0d1b2a';
+    const cell = size / n;
+    doc.setFillColor(255, 255, 255);
+    doc.rect(x, y, size, size, 'F');
+    doc.setFillColor(13, 27, 42);
     for (let r = 0; r < n; r++) {
       for (let c = 0; c < n; c++) {
-        if (qr.isDark(r, c)) ctx.fillRect(margin + c * cell, margin + r * cell, cell, cell);
+        if (qr.isDark(r, c))
+          doc.rect(x + c * cell, y + r * cell, cell, cell, 'F');
       }
     }
-    return canvas.toDataURL('image/png');
-  } catch (_) { return null; }
+  } catch (_) {}
+}
+
+/* Limpa o CN do certificado ICP-Brasil: remove CPF e outros campos após ":". */
+function cleanCN(cn) {
+  return (cn || '').replace(/:\d[\d./-]*.*$/, '').trim();
 }
 
 function updateCertIndicator() {
@@ -3560,7 +3562,7 @@ async function pdfICPStamp(doc, verifyId) {
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(90, 110, 130);
       doc.text(
-        `Assinado digitalmente — ICP-Brasil — ${sigState.cn} — ID: ${verifyId}`,
+        `Assinado digitalmente — ICP-Brasil — ${cleanCN(sigState.cn)} — ID: ${verifyId}`,
         pgW / 2, pgH - 3, { align: 'center' }
       );
       doc.setTextColor(13, 27, 42);
@@ -3568,11 +3570,11 @@ async function pdfICPStamp(doc, verifyId) {
       // Portrait: selo visual completo
       const M   = 18;
       const bX  = M;
-      const bY  = 277;   // topo do carimbo (abaixo do CRM em y=273)
+      const bY  = 275;   // topo do carimbo — mais espaço acima (CRM em y=270)
       const sW  = pgW - 2 * M;  // 174mm
-      const sH  = 15;   // altura do carimbo
+      const sH  = 16;   // altura do carimbo
       const bdW = 34;   // largura do badge ICP (esquerda)
-      const qrS = sH - 2;   // tamanho do QR (quadrado)
+      const qrS = sH - 1;   // tamanho do QR (quadrado, quase a altura toda)
       const qrX = bX + sW - qrS;  // QR alinhado à direita
       const txX = bX + bdW + 2.5; // início do texto
       const txW = sW - bdW - qrS - 5; // largura disponível para texto
@@ -3586,7 +3588,6 @@ async function pdfICPStamp(doc, verifyId) {
       // Badge navy (esquerda)
       doc.setFillColor(13, 27, 42);
       doc.roundedRect(bX, bY, bdW, sH, 1.5, 1.5, 'F');
-      // Reta o lado direito do badge (evitar borda arredondada dupla)
       doc.rect(bX + bdW - 3, bY, 3, sH, 'F');
 
       // Texto do badge
@@ -3594,47 +3595,39 @@ async function pdfICPStamp(doc, verifyId) {
       doc.setFontSize(4.6);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(184, 154, 94);
-      doc.text('ASSINATURA ELETRÔNICA', bCx, bY + 3.5, { align: 'center' });
+      doc.text('ASSINATURA ELETRÔNICA', bCx, bY + 3.8, { align: 'center' });
 
       doc.setFontSize(6.8);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(255, 210, 70);
-      doc.text('AVANÇADA', bCx, bY + 7.5, { align: 'center' });
+      doc.text('AVANÇADA', bCx, bY + 8, { align: 'center' });
 
-      // Divisória interna do badge
       doc.setDrawColor(184, 154, 94);
       doc.setLineWidth(0.25);
-      doc.line(bX + 3, bY + 9.3, bX + bdW - 3, bY + 9.3);
+      doc.line(bX + 3, bY + 9.8, bX + bdW - 3, bY + 9.8);
 
-      // "ICP Brasil" no badge
       doc.setFontSize(7.5);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(255, 255, 255);
-      doc.text('ICP', bX + 5.5, bY + 13);
+      doc.text('ICP', bX + 5.5, bY + 13.5);
       doc.setFontSize(6.5);
       doc.setFont('helvetica', 'normal');
-      doc.text('Brasil', bX + 14, bY + 13);
+      doc.text('Brasil', bX + 14, bY + 13.5);
       doc.setFontSize(8.5);
-      doc.text('+', bX + 28, bY + 13);
+      doc.text('+', bX + 28, bY + 13.5);
 
-      // Divisória vertical entre badge e texto
+      // Divisórias verticais
       doc.setDrawColor(150, 180, 210);
       doc.setLineWidth(0.2);
       doc.line(bX + bdW + 0.8, bY + 2, bX + bdW + 0.8, bY + sH - 2);
-
-      // Divisória vertical entre texto e QR
       doc.line(qrX - 2, bY + 2, qrX - 2, bY + sH - 2);
 
-      // QR code
-      if (qrDataUrl) {
-        try { doc.addImage(qrDataUrl, 'PNG', qrX, bY + 1, qrS - 0.5, qrS - 0.5); } catch (_) {}
-      }
+      // QR code desenhado diretamente como vetores (sem canvas/addImage)
+      drawQRCodeInPDF(doc, 'https://validar.iti.gov.br/', qrX, bY + 0.5, qrS - 1);
 
-      // Texto descritivo central — usa dados do replay (doc já assinado) ou dados atuais
+      // Texto descritivo — usa dados do replay ou dados atuais; limpa CPF do CN
       const replay = sigState.replayStamp;
-      const stampCn     = replay ? replay.cn     : sigState.cn;
-      const stampIssuer = replay ? replay.issuer : sigState.issuer;
-      const stampSerial = replay ? replay.serial : sigState.serial;
+      const stampCn = cleanCN(replay ? replay.cn : sigState.cn);
       const sigDate = new Date(replay ? replay.signedAt : Date.now()).toLocaleString('pt-BR', {
         timeZone: 'America/Fortaleza',
         day: '2-digit', month: '2-digit', year: 'numeric',
@@ -3647,8 +3640,8 @@ async function pdfICPStamp(doc, verifyId) {
 
       const descText = `Documento médico assinado digitalmente por ${stampCn.toUpperCase()} em ${sigDate}, conforme MP nº 2.200-2/2001, Resolução CFM 2.299/2021 e Lei 14.063/2020.`;
       const descLines = doc.splitTextToSize(descText, txW);
-      let ty = bY + 4;
-      const lh = 3.4;
+      let ty = bY + 4.5;
+      const lh = 3.5;
       descLines.slice(0, 3).forEach(ln => { doc.text(ln, txX, ty); ty += lh; });
 
       doc.setFontSize(5.8);
@@ -3691,10 +3684,11 @@ function pdfFooter(doc) {
   const W = 210, M = 18;
   const pages = doc.internal.getNumberOfPages();
   const signing = sigState.signingNow;
-  const yLine = signing ? 263 : 268;
-  const yName = signing ? 268 : 273;
-  const yCRM  = signing ? 273 : 278;
-  const yInfo = signing ? 294 : 290;
+  // Quando assinando: sobe 8mm para abrir espaço ao carimbo (bY=275, sH=16 → y=275–291)
+  const yLine = signing ? 260 : 268;
+  const yName = signing ? 265 : 273;
+  const yCRM  = signing ? 270 : 278;
+  const yInfo = signing ? 293 : 290;
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
     doc.setDrawColor(13, 27, 42);
