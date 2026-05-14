@@ -379,6 +379,7 @@ permalink: /medico/prontuario/
         <p class="patient-meta" id="d-meta">—</p>
       </div>
       <div class="btn-row">
+        <button class="btn-secondary" id="btn-print-prontuario" title="Exportar prontuário completo em PDF">📋 Prontuário completo</button>
         <button class="btn-secondary" id="btn-edit-patient">Editar dados</button>
         <button class="btn-ghost" id="btn-back">← Pacientes</button>
       </div>
@@ -1225,6 +1226,7 @@ $('form-history').onsubmit = async (e) => {
 
 $('btn-edit-patient').onclick = () => openPatientForm(currentPatient);
 $('btn-back').onclick = backToList;
+$('btn-print-prontuario').onclick = () => pdfProntuarioCompleto();
 function backToList() {
   hide('view-detail');
   show('view-patients');
@@ -3643,7 +3645,7 @@ async function pdfICPStamp(doc, verifyId) {
 
       doc.setFontSize(5.8);
       doc.setTextColor(40, 80, 150);
-      doc.text('O documento poderá ser validado no QR Code ao lado:', txX, ty); ty += lh;
+      doc.text('O documento poderá ser validado em: https://validar.iti.gov.br', txX, ty); ty += lh;
       doc.setTextColor(60, 90, 115);
       doc.text(`ID de verificação: ${verifyId}`, txX, ty);
 
@@ -4452,6 +4454,219 @@ function pdfRelatorio(d, label) {
   pdfFooter(doc);
   const safe = currentPatient.full_name.replace(/\s+/g,'-').toLowerCase();
   pdfSave(doc, `relatorio-${safe}-${d.issue_date}.pdf`);
+}
+
+/* ===========================================================
+   PDF — Prontuário Completo
+   Gera um único PDF com histórico médico, todas as consultas
+   e todos os documentos emitidos para o paciente atual.
+=========================================================== */
+async function pdfProntuarioCompleto() {
+  const p = currentPatient;
+  if (!p) return;
+
+  const btn = document.getElementById('btn-print-prontuario');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Gerando…'; }
+
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const M = 18, W = 210;
+    const TYPES_CONSULT = { primeira:'Primeira consulta', retorno:'Retorno', urgencia:'Urgência', teleconsulta:'Teleconsulta' };
+    const TYPES_DOC = { receita_simples:'Receita simples', receita_especial:'Receita especial (controlado)', exames:'Solicitação de exames', atestado:'Atestado médico', laudo:'Laudo médico', relatorio:'Relatório médico' };
+
+    let firstPage = true;
+
+    const newSection = (title) => {
+      if (!firstPage) doc.addPage();
+      firstPage = false;
+      pdfHeader(doc, 'Prontuário Completo');
+      let y = 42;
+      // Faixa de seção
+      doc.setFillColor(30, 50, 80);
+      doc.rect(M, y, W - 2*M, 8, 'F');
+      doc.setTextColor(212, 185, 122);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.text(title.toUpperCase(), M + 4, y + 5.5);
+      doc.setTextColor(13, 27, 42);
+      return y + 14;
+    };
+
+    const addText = (doc, text, x, yRef, maxW, fontSize = 10, lineH = 5, style = 'normal') => {
+      if (!text) return yRef;
+      doc.setFont('helvetica', style);
+      doc.setFontSize(fontSize);
+      const lines = doc.splitTextToSize(String(text), maxW);
+      for (const ln of lines) {
+        if (yRef > 252) {
+          doc.addPage();
+          pdfHeader(doc, 'Prontuário Completo');
+          yRef = 48;
+        }
+        doc.text(ln, x, yRef);
+        yRef += lineH;
+      }
+      return yRef;
+    };
+
+    const sectionLine = (doc, y) => {
+      doc.setDrawColor(216, 228, 240);
+      doc.setLineWidth(0.25);
+      doc.line(M, y, W - M, y);
+      return y + 4;
+    };
+
+    // ── 1. IDENTIFICAÇÃO DO PACIENTE ──────────────────────────
+    let y = newSection('Identificação do Paciente');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.setTextColor(13, 27, 42);
+    doc.text(p.full_name || '—', M, y); y += 7;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+    doc.setTextColor(60, 80, 110);
+    const idMeta = [
+      p.birth_date ? `Nasc.: ${fmtDate(p.birth_date)} (${age(p.birth_date)} anos)` : null,
+      p.sex ? ({ F:'Sexo: Feminino', M:'Sexo: Masculino', O:'Sexo: Outro' }[p.sex] || null) : null,
+      p.cpf ? `CPF: ${p.cpf}` : null,
+      p.rg  ? `RG: ${p.rg}`   : null,
+      p.phone ? `Tel.: ${p.phone}` : null,
+      p.health_plan ? `Convênio: ${p.health_plan}` : null,
+    ].filter(Boolean);
+    idMeta.forEach(m => { doc.text(m, M, y); y += 5; });
+    if (p.address) { doc.text(`End.: ${p.address}`, M, y); y += 5; }
+    y += 2;
+
+    // ── 2. HISTÓRICO MÉDICO ───────────────────────────────────
+    const h = currentHistory;
+    if (h && (h.comorbidities || h.allergies || h.family_history || h.personal_history || h.medications || h.vaccinations || h.notes)) {
+      y = sectionLine(doc, y);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(30, 50, 80);
+      doc.text('HISTÓRICO MÉDICO', M, y); y += 6;
+      doc.setTextColor(13, 27, 42);
+      const hFields = [
+        ['Comorbidades', h.comorbidities],
+        ['Alergias', h.allergies],
+        ['Antecedentes familiares', h.family_history],
+        ['Antecedentes pessoais', h.personal_history],
+        ['Medicações em uso', h.medications],
+        ['Vacinação', h.vaccinations],
+        ['Observações', h.notes],
+      ];
+      for (const [label, val] of hFields) {
+        if (!val) continue;
+        if (y > 248) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+        doc.text(label + ':', M, y); y += 4.5;
+        y = addText(doc, val, M, y, W - 2*M, 9, 4.5);
+        y += 2;
+      }
+    }
+
+    // ── 3. CONSULTAS ─────────────────────────────────────────
+    const consults = [...currentConsults].sort((a, b) =>
+      (a.consultation_date || '').localeCompare(b.consultation_date || ''));
+
+    if (consults.length) {
+      y = newSection(`Consultas (${consults.length})`);
+      for (const c of consults) {
+        if (y > 240) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
+        // Cabeçalho da consulta
+        doc.setFillColor(240, 244, 252);
+        doc.rect(M, y - 1, W - 2*M, 8, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(13, 27, 42);
+        doc.text(`${fmtDateTime(c.consultation_date)}  ·  ${TYPES_CONSULT[c.type] || c.type}`, M + 2, y + 5);
+        if (c.is_signed) {
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(30, 110, 70);
+          doc.text('✓ assinado', W - M - 2, y + 5, { align: 'right' });
+        }
+        y += 11; doc.setTextColor(13, 27, 42);
+
+        const cFields = [
+          ['Queixa principal', c.chief_complaint],
+          ['História da doença', c.hda],
+          ['Exame físico', c.physical_exam],
+          ['Exame neurológico', c.neuro_exam],
+          ['Hipótese diagnóstica', c.hypothesis],
+          ['CID-10', (c.cid_codes || []).join(', ')],
+          ['Conduta', c.plan],
+          ['Retorno', c.return_in],
+          ['Observações', c.notes],
+        ];
+        for (const [label, val] of cFields) {
+          if (!val) continue;
+          if (y > 248) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(50, 70, 100);
+          doc.text(label + ':', M, y); y += 4;
+          y = addText(doc, val, M, y, W - 2*M, 9, 4.5);
+          y += 1;
+        }
+        y = sectionLine(doc, y + 2);
+      }
+    }
+
+    // ── 4. DOCUMENTOS ────────────────────────────────────────
+    const docs = [...currentDocs].sort((a, b) =>
+      (a.issue_date || '').localeCompare(b.issue_date || ''));
+
+    if (docs.length) {
+      y = newSection(`Documentos Emitidos (${docs.length})`);
+      for (const d of docs) {
+        if (y > 240) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
+        doc.setFillColor(240, 244, 252);
+        doc.rect(M, y - 1, W - 2*M, 8, 'F');
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(13, 27, 42);
+        const docLabel = `${fmtDate(d.issue_date)}  ·  ${TYPES_DOC[d.type] || d.type}`;
+        doc.text(docLabel, M + 2, y + 5);
+        if (d.title) {
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
+          const titleTxt = d.title.length > 50 ? d.title.slice(0, 50) + '…' : d.title;
+          doc.text(titleTxt, W - M - 2, y + 5, { align: 'right' });
+        }
+        if (d.is_signed) {
+          doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(30, 110, 70);
+          // Já impresso no title spot; add a small marker
+        }
+        y += 11; doc.setTextColor(13, 27, 42);
+
+        // Conteúdo resumido por tipo
+        const c = d.content || {};
+        if (d.type === 'receita_simples' || d.type === 'receita_especial') {
+          (c.medications || []).forEach((m, i) => {
+            if (!m.name) return;
+            if (y > 248) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
+            doc.text(`${i+1}) ${m.name}${m.concentration ? ' · ' + m.concentration : ''}`, M, y); y += 4.5;
+            if (m.posology) y = addText(doc, '   ' + m.posology, M, y, W - 2*M, 9, 4.2);
+            if (m.quantity) { doc.setFont('helvetica','italic'); doc.setFontSize(8.5); doc.text(`   Qtd.: ${m.quantity}`, M, y); y += 4; doc.setFont('helvetica','normal'); }
+            y += 1;
+          });
+          if (c.instructions) y = addText(doc, 'Orientações: ' + c.instructions, M, y, W - 2*M, 9, 4.5);
+        } else if (d.type === 'exames') {
+          (c.exams || []).forEach((e, i) => {
+            if (!e.name) return;
+            if (y > 250) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
+            doc.setFont('helvetica','normal'); doc.setFontSize(9);
+            doc.text(`${i+1}) ${e.name}${e.specs ? ' — ' + e.specs : ''}`, M, y); y += 4.5;
+          });
+          if (c.indication) y = addText(doc, 'Indicação: ' + c.indication, M, y, W - 2*M, 9, 4.5);
+        } else {
+          const bodyField = c.body || c.text || c.reason || '';
+          if (bodyField) y = addText(doc, bodyField, M, y, W - 2*M, 9, 4.5);
+        }
+        y = sectionLine(doc, y + 2);
+      }
+    }
+
+    // ── Rodapé final ─────────────────────────────────────────
+    pdfFooter(doc);
+
+    const safe = p.full_name.replace(/\s+/g, '-').toLowerCase();
+    const today = new Date().toISOString().slice(0, 10);
+    pdfSave(doc, `prontuario-completo-${safe}-${today}.pdf`);
+
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '📋 Prontuário completo'; }
+  }
 }
 
 /* ===========================================================
