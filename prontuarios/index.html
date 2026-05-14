@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prontuário Médico — Plataforma Multi-Profissional</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --navy: #0d1b2a; --steel: #2e4a6b; --gold: #b89a5e; --gold-light: #d4b97a;
+      --green: #2d9e6b; --red: #c44; --gray: #8a9bb0; --bg: #f5f2ee; --white: #fff;
+    }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg); color: var(--navy);
+      min-height: 100vh; display: flex; flex-direction: column;
+    }
+
+    /* Header */
+    header {
+      background: var(--navy); padding: 16px 40px;
+      display: flex; align-items: center; gap: 16px;
+    }
+    .brand { color: var(--white); font-size: 1rem; font-weight: 600; letter-spacing: 0.04em; }
+    .brand span { color: var(--gold-light); }
+    .brand-sub { font-size: 0.72rem; color: var(--gray); letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+
+    /* Hero */
+    .hero {
+      background: var(--navy);
+      padding: 60px 40px 70px;
+      text-align: center;
+      border-bottom: 3px solid var(--gold);
+    }
+    .hero-tag {
+      font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--gold-light); margin-bottom: 14px;
+    }
+    .hero h1 {
+      font-size: clamp(1.6rem, 4vw, 2.4rem); font-weight: 700;
+      color: var(--white); line-height: 1.25; margin-bottom: 14px;
+    }
+    .hero p {
+      font-size: 1rem; color: rgba(200,216,232,0.8);
+      max-width: 580px; margin: 0 auto 28px; line-height: 1.6;
+    }
+    .hero-features {
+      display: flex; justify-content: center; gap: 32px; flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+    .feat {
+      text-align: center; color: rgba(200,216,232,0.75); font-size: 0.84rem;
+    }
+    .feat-ic { font-size: 1.5rem; display: block; margin-bottom: 6px; }
+
+    /* Auth card */
+    .auth-wrap {
+      max-width: 440px; margin: -32px auto 0; position: relative; z-index: 10;
+      padding: 0 16px;
+    }
+    .auth-card {
+      background: var(--white); border: 1px solid #dde4ee;
+      padding: 32px 32px 28px; box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    }
+    .auth-tabs {
+      display: flex; border-bottom: 2px solid #eaeff5; margin-bottom: 24px;
+    }
+    .auth-tab {
+      flex: 1; padding: 10px; border: none; background: none;
+      font-size: 0.9rem; font-family: inherit; cursor: pointer;
+      color: var(--gray); font-weight: 500; letter-spacing: 0.02em;
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .auth-tab.active { color: var(--navy); border-bottom-color: var(--gold); }
+
+    .auth-panel { display: none; }
+    .auth-panel.active { display: block; }
+
+    label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--gray);
+            letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 5px; }
+    input[type=text], input[type=email], input[type=password] {
+      width: 100%; padding: 10px 14px; border: 1px solid #c8d4e4;
+      font-size: 0.92rem; font-family: inherit; color: var(--navy);
+      margin-bottom: 14px; outline: none; background: #fff;
+    }
+    input:focus { border-color: var(--steel); }
+
+    .btn-primary {
+      width: 100%; padding: 12px; background: var(--navy); color: var(--white);
+      border: none; font-size: 0.92rem; font-family: inherit; cursor: pointer;
+      font-weight: 600; letter-spacing: 0.04em; transition: background 0.15s;
+    }
+    .btn-primary:hover { background: var(--steel); }
+    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .msg { font-size: 0.84rem; padding: 10px 14px; margin-bottom: 14px; }
+    .msg.error { background: #fdecea; color: #9b2020; }
+    .msg.success { background: #f0faf5; color: #1a6b47; }
+    .msg.info { background: #f0f4fa; color: var(--steel); }
+
+    .auth-hint {
+      font-size: 0.78rem; color: var(--gray); text-align: center;
+      margin-top: 16px; line-height: 1.5;
+    }
+
+    /* Features section */
+    .features-section {
+      max-width: 900px; margin: 64px auto; padding: 0 24px;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 24px;
+    }
+    .feature-card {
+      background: var(--white); border: 1px solid #dde4ee;
+      padding: 24px; border-top: 3px solid var(--gold);
+    }
+    .feature-card h3 { font-size: 0.95rem; margin-bottom: 8px; }
+    .feature-card p { font-size: 0.84rem; color: var(--gray); line-height: 1.6; }
+    .feature-ic { font-size: 1.6rem; margin-bottom: 12px; display: block; }
+
+    footer {
+      text-align: center; padding: 32px 16px;
+      font-size: 0.78rem; color: var(--gray);
+      border-top: 1px solid #eaeff5; margin-top: auto;
+    }
+    footer a { color: var(--steel); text-decoration: none; }
+
+    @media (max-width: 480px) {
+      .hero { padding: 40px 20px 60px; }
+      .auth-card { padding: 24px 20px; }
+      header { padding: 14px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand">Prontuário <span>Médico</span></div>
+    <div class="brand-sub">Plataforma Multi-Profissional</div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="hero-tag">Prontuário Eletrônico</div>
+  <h1>Gestão clínica completa,<br>totalmente personalizada</h1>
+  <p>Prontuário eletrônico com seus dados, seus pacientes e seus documentos — com assinatura digital ICP-Brasil e IA integrada.</p>
+  <div class="hero-features">
+    <div class="feat"><span class="feat-ic">🔏</span>Assinatura ICP-Brasil</div>
+    <div class="feat"><span class="feat-ic">✨</span>IA Integrada</div>
+    <div class="feat"><span class="feat-ic">📋</span>Documentos personalizados</div>
+    <div class="feat"><span class="feat-ic">🔒</span>Dados exclusivamente seus</div>
+  </div>
+</section>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-tab="login">Entrar</button>
+      <button class="auth-tab" data-tab="signup">Criar conta</button>
+    </div>
+
+    <!-- Login -->
+    <div class="auth-panel active" id="panel-login">
+      <div id="msg-login"></div>
+      <label for="login-email">E-mail</label>
+      <input type="email" id="login-email" placeholder="seu@email.com" autocomplete="email">
+      <label for="login-pass">Senha</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+      <button class="btn-primary" id="btn-login">Entrar</button>
+      <p class="auth-hint">
+        Esqueceu a senha?
+        <a href="#" id="link-reset" style="color:var(--steel);">Redefinir por e-mail</a>
+      </p>
+    </div>
+
+    <!-- Signup -->
+    <div class="auth-panel" id="panel-signup">
+      <div id="msg-signup"></div>
+      <label for="signup-name">Nome completo</label>
+      <input type="text" id="signup-name" placeholder="Dr(a). Seu Nome" autocomplete="name">
+      <label for="signup-email">E-mail profissional</label>
+      <input type="email" id="signup-email" placeholder="seu@email.com" autocomplete="email">
+      <label for="signup-pass">Senha (mín. 8 caracteres)</label>
+      <input type="password" id="signup-pass" placeholder="••••••••" autocomplete="new-password">
+      <button class="btn-primary" id="btn-signup">Criar conta</button>
+      <p class="auth-hint">Ao criar a conta, você concorda com o uso exclusivo para fins profissionais médicos.</p>
+    </div>
+  </div>
+</div>
+
+<div class="features-section">
+  <div class="feature-card">
+    <span class="feature-ic">👤</span>
+    <h3>Totalmente personalizado</h3>
+    <p>Seus documentos saem com seu nome, CRM, especialidade, endereço e logotipo. Nenhum dado de outro médico aparece.</p>
+  </div>
+  <div class="feature-card">
+    <span class="feature-ic">🔒</span>
+    <h3>Isolamento total de dados</h3>
+    <p>Seus pacientes, consultas e documentos são visíveis apenas para você. Nenhum colega acessa suas informações.</p>
+  </div>
+  <div class="feature-card">
+    <span class="feature-ic">🔏</span>
+    <h3>Assinatura digital ICP-Brasil</h3>
+    <p>Assine documentos com seu certificado digital A1/A3. Conformidade com CFM 2.299/2021 e Lei 14.063/2020.</p>
+  </div>
+  <div class="feature-card">
+    <span class="feature-ic">✨</span>
+    <h3>IA para laudos e relatórios</h3>
+    <p>Geração automática de laudos e relatórios médicos com IA, usando suas próprias consultas como contexto.</p>
+  </div>
+  <div class="feature-card">
+    <span class="feature-ic">📄</span>
+    <h3>Receitas e solicitações</h3>
+    <p>Receituários simples e controlados, solicitações de exames, atestados, laudos e relatórios em PDF.</p>
+  </div>
+  <div class="feature-card">
+    <span class="feature-ic">🏥</span>
+    <h3>Múltiplos convênios</h3>
+    <p>Cadastre seus convênios com endereços distintos. Os documentos usam automaticamente o endereço correto.</p>
+  </div>
+</div>
+
+<footer>
+  Plataforma de prontuário eletrônico &nbsp;·&nbsp;
+  <a href="https://neurobrendow.com.br" target="_blank">neurobrendow.com.br</a>
+</footer>
+
+<script>
+  const SUPABASE_URL      = 'https://telypzqmofahhhnphend.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_zstGbiAexvo1-IxgaNFObQ_mrTNQ8pg';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Redireciona se já autenticado
+  sb.auth.getSession().then(({ data: { session } }) => {
+    if (session) window.location.href = '/medico/prontuarios/app/';
+  });
+
+  // Tabs
+  document.querySelectorAll('.auth-tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.auth-tab, .auth-panel').forEach(el => el.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    };
+  });
+
+  function showMsg(id, text, type = 'error') {
+    const el = document.getElementById(id);
+    el.innerHTML = `<div class="msg ${type}">${text}</div>`;
+  }
+
+  // Login
+  document.getElementById('btn-login').onclick = async () => {
+    const btn   = document.getElementById('btn-login');
+    const email = document.getElementById('login-email').value.trim();
+    const pass  = document.getElementById('login-pass').value;
+    if (!email || !pass) { showMsg('msg-login', 'Preencha e-mail e senha.'); return; }
+    btn.disabled = true; btn.textContent = 'Entrando…';
+    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) {
+      showMsg('msg-login', 'E-mail ou senha incorretos.');
+      btn.disabled = false; btn.textContent = 'Entrar';
+    } else {
+      window.location.href = '/medico/prontuarios/app/';
+    }
+  };
+
+  // Enter key no login
+  ['login-email','login-pass'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btn-login').click();
+    });
+  });
+
+  // Signup
+  document.getElementById('btn-signup').onclick = async () => {
+    const btn   = document.getElementById('btn-signup');
+    const name  = document.getElementById('signup-name').value.trim();
+    const email = document.getElementById('signup-email').value.trim();
+    const pass  = document.getElementById('signup-pass').value;
+    if (!name)         { showMsg('msg-signup', 'Digite seu nome completo.'); return; }
+    if (!email)        { showMsg('msg-signup', 'Digite seu e-mail.'); return; }
+    if (pass.length < 8) { showMsg('msg-signup', 'A senha precisa ter no mínimo 8 caracteres.'); return; }
+    btn.disabled = true; btn.textContent = 'Criando conta…';
+    const { data, error } = await sb.auth.signUp({
+      email, password: pass,
+      options: { data: { full_name: name } }
+    });
+    if (error) {
+      showMsg('msg-signup', error.message);
+      btn.disabled = false; btn.textContent = 'Criar conta';
+      return;
+    }
+    if (data.session) {
+      // Confirmação automática (e-mail desabilitado no Supabase)
+      window.location.href = '/medico/prontuarios/app/';
+    } else {
+      showMsg('msg-signup',
+        'Conta criada! Verifique seu e-mail para confirmar o cadastro e depois faça login.',
+        'success');
+      btn.disabled = false; btn.textContent = 'Criar conta';
+    }
+  };
+
+  // Redefinir senha
+  document.getElementById('link-reset').onclick = async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('login-email').value.trim();
+    if (!email) { showMsg('msg-login', 'Digite seu e-mail acima para redefinir a senha.', 'info'); return; }
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + '/medico/prontuarios/app/'
+    });
+    if (error) showMsg('msg-login', error.message);
+    else showMsg('msg-login', 'Link de redefinição enviado para ' + email + '.', 'success');
+  };
+</script>
+</body>
+</html>
