@@ -3567,9 +3567,9 @@ async function pdfICPStamp(doc, verifyId) {
       // Portrait: selo visual completo
       const M   = 18;
       const bX  = M;
-      const bY  = 275;   // topo do carimbo — mais espaço acima (CRM em y=270)
+      const bY  = 270;   // topo do carimbo (CRM em y=264, gap de 6mm)
       const sW  = pgW - 2 * M;  // 174mm
-      const sH  = 16;   // altura do carimbo
+      const sH  = 17;   // altura do carimbo (termina em y=287, info em y=290)
       const bdW = 34;   // largura do badge ICP (esquerda)
       const qrS = sH - 1;   // tamanho do QR (quadrado, quase a altura toda)
       const qrX = bX + sW - qrS;  // QR alinhado à direita
@@ -3643,7 +3643,7 @@ async function pdfICPStamp(doc, verifyId) {
 
       doc.setFontSize(5.8);
       doc.setTextColor(40, 80, 150);
-      doc.text('O documento poderá ser validado no QR Code ao lado:', txX, ty); ty += lh;
+      doc.text('O documento poderá ser validado em: https://validar.iti.gov.br', txX, ty); ty += lh;
       doc.setTextColor(60, 90, 115);
       doc.text(`ID de verificação: ${verifyId}`, txX, ty);
 
@@ -3681,11 +3681,11 @@ function pdfFooter(doc) {
   const W = 210, M = 18;
   const pages = doc.internal.getNumberOfPages();
   const signing = sigState.signingNow;
-  // Quando assinando: sobe 8mm para abrir espaço ao carimbo (bY=275, sH=16 → y=275–291)
-  const yLine = signing ? 260 : 268;
-  const yName = signing ? 265 : 273;
-  const yCRM  = signing ? 270 : 278;
-  const yInfo = signing ? 293 : 290;
+  // Quando assinando: sobe 14mm para abrir espaço ao carimbo (bY=270, sH=15 → y=270–285)
+  const yLine = signing ? 254 : 268;
+  const yName = signing ? 259 : 273;
+  const yCRM  = signing ? 264 : 278;
+  const yInfo = signing ? 290 : 290;
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
     doc.setDrawColor(13, 27, 42);
