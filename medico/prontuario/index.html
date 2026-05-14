@@ -891,6 +891,8 @@ async function onSignedIn(user) {
   $('chk-solo-elet').onchange = function() {
     sigState.soloElectronic = this.checked;
     localStorage.setItem('pref_soloElectronic', this.checked ? '1' : '0');
+    const modal = document.querySelector('#chk-solo-elet-modal');
+    if (modal) modal.checked = this.checked;
   };
   $('btn-ai-config').onclick = openAIConfig;
   $('btn-logout').onclick = async () => { await sb.auth.signOut(); };
@@ -1485,6 +1487,13 @@ function openConsultForm(c) {
       </form>
     `,
     footHTML: `
+      <div style="width:100%;padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid #edf0f5;text-align:left;">
+        <label style="display:inline-flex;align-items:center;gap:7px;font-size:0.82rem;color:var(--gray);cursor:pointer;user-select:none;">
+          <input type="checkbox" id="chk-solo-elet-modal" style="accent-color:#b89a5e;width:14px;height:14px;cursor:pointer;" ${sigState.soloElectronic ? 'checked' : ''}>
+          Apenas assinatura eletrônica
+          <span style="font-size:0.76rem;color:#a0b0c8;">(carimbo ICP acima da linha de assinatura)</span>
+        </label>
+      </div>
       <span id="autosave-status" style="font-size:0.74rem;color:#8a9bb0;align-self:center;"></span>
       <div style="flex:1"></div>
       <button class="btn-secondary" data-close>Cancelar</button>
@@ -1492,6 +1501,14 @@ function openConsultForm(c) {
       <button class="btn-primary" id="btn-save-consult">${isNew ? 'Registrar consulta' : 'Salvar'}</button>
     `,
     onMount: (modal) => {
+      const soloChkModal = modal.querySelector('#chk-solo-elet-modal');
+      if (soloChkModal) soloChkModal.onchange = function() {
+        sigState.soloElectronic = this.checked;
+        localStorage.setItem('pref_soloElectronic', this.checked ? '1' : '0');
+        const topChk = document.getElementById('chk-solo-elet');
+        if (topChk) topChk.checked = this.checked;
+      };
+
       const tagWrap = modal.querySelector('#cid-tags');
       const renderTags = () => {
         tagWrap.innerHTML = cidCodes.map((code, i) =>
@@ -2777,12 +2794,28 @@ function openDocForm(type, doc) {
     size: 'lg',
     bodyHTML: titleInputHTML + bodyHTML,
     footHTML: `
+      ${type !== 'receita_especial' ? `
+      <div style="width:100%;padding-bottom:8px;margin-bottom:2px;border-bottom:1px solid #edf0f5;text-align:left;">
+        <label style="display:inline-flex;align-items:center;gap:7px;font-size:0.82rem;color:var(--gray);cursor:pointer;user-select:none;">
+          <input type="checkbox" id="chk-solo-elet-modal" style="accent-color:#b89a5e;width:14px;height:14px;cursor:pointer;" ${sigState.soloElectronic ? 'checked' : ''}>
+          Apenas assinatura eletrônica
+          <span style="font-size:0.76rem;color:#a0b0c8;">(carimbo ICP acima da linha de assinatura)</span>
+        </label>
+      </div>` : ''}
       <div style="flex:1"></div>
       <button class="btn-secondary" data-close>Cancelar</button>
       ${sigState.loaded ? `<button class="btn-primary" id="btn-sign-doc" style="background:var(--steel);color:#fff;">🔏 Salvar e assinar</button>` : ''}
       <button class="btn-primary" id="btn-save-doc">${isNew ? 'Salvar e gerar PDF' : 'Salvar'}</button>
     `,
     onMount: (m) => {
+      const soloChkModal = m.querySelector('#chk-solo-elet-modal');
+      if (soloChkModal) soloChkModal.onchange = function() {
+        sigState.soloElectronic = this.checked;
+        localStorage.setItem('pref_soloElectronic', this.checked ? '1' : '0');
+        const topChk = document.getElementById('chk-solo-elet');
+        if (topChk) topChk.checked = this.checked;
+      };
+
       // dynamic add buttons
       const addMed = m.querySelector('#btn-add-med');
       if (addMed) addMed.onclick = () => {
