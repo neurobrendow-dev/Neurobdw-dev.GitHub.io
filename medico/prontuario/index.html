@@ -931,15 +931,17 @@ async function onSignedIn(user) {
    LISTA DE PACIENTES
 =========================================================== */
 async function loadPatients() {
-  const { data, error } = await sb
-    .from('emr_patient_summary')
-    .select('*')
-    .order('last_consultation_at', { ascending: false, nullsFirst: false });
-  if (error) {
-    setHTML('patients-container', `<div class="msg error">Erro: ${escapeHtml(error.message)}</div>`);
+  const [summaryRes, planRes] = await Promise.all([
+    sb.from('emr_patient_summary').select('*').order('last_consultation_at', { ascending: false, nullsFirst: false }),
+    sb.from('emr_patients').select('id, health_plan')
+  ]);
+  if (summaryRes.error) {
+    setHTML('patients-container', `<div class="msg error">Erro: ${escapeHtml(summaryRes.error.message)}</div>`);
     return;
   }
-  allPatients = data || [];
+  const planMap = {};
+  (planRes.data || []).forEach(p => { planMap[p.id] = p.health_plan || ''; });
+  allPatients = (summaryRes.data || []).map(p => ({ ...p, health_plan: planMap[p.id] ?? '' }));
   renderPatients(allPatients);
 }
 
