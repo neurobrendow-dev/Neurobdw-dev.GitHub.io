@@ -3599,7 +3599,7 @@ async function pdfICPStamp(doc, verifyId) {
       doc.setFontSize(6.8);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(255, 210, 70);
-      doc.text('QUALIFICADA', bCx, bY + 8, { align: 'center' });
+      doc.text('AVANÇADA', bCx, bY + 8, { align: 'center' });
 
       doc.setDrawColor(184, 154, 94);
       doc.setLineWidth(0.25);
@@ -3612,8 +3612,15 @@ async function pdfICPStamp(doc, verifyId) {
       doc.setFontSize(6.5);
       doc.setFont('helvetica', 'normal');
       doc.text('Brasil', bX + 14, bY + 13.5);
-      doc.setFontSize(8.5);
-      doc.text('🔐', bX + 26, bY + 13.5);
+      // Cadeado vetorial (branco sobre fundo navy)
+      const lkX = bX + 25.5, lkY = bY + 7.5;
+      doc.setFillColor(255, 255, 255);
+      doc.rect(lkX, lkY, 6, 4.5, 'F');          // corpo
+      doc.rect(lkX + 0.8, lkY - 3.5, 1.2, 4.2, 'F'); // perna esquerda
+      doc.rect(lkX + 4.0, lkY - 3.5, 1.2, 4.2, 'F'); // perna direita
+      doc.rect(lkX + 0.8, lkY - 3.5, 4.4, 1.2, 'F'); // barra superior
+      doc.setFillColor(13, 27, 42);
+      doc.circle(lkX + 3, lkY + 2.5, 1, 'F');   // buraco da fechadura
 
       // Divisórias verticais
       doc.setDrawColor(150, 180, 210);
@@ -4480,7 +4487,7 @@ async function pdfProntuarioCompleto() {
     const newSection = (title) => {
       if (!firstPage) doc.addPage();
       firstPage = false;
-      pdfHeader(doc, 'Prontuário');
+      pdfHeader(doc, 'Prontuário Completo');
       let y = 42;
       // Faixa de seção
       doc.setFillColor(30, 50, 80);
@@ -4501,7 +4508,7 @@ async function pdfProntuarioCompleto() {
       for (const ln of lines) {
         if (yRef > 252) {
           doc.addPage();
-          pdfHeader(doc, 'Prontuário');
+          pdfHeader(doc, 'Prontuário Completo');
           yRef = 48;
         }
         doc.text(ln, x, yRef);
@@ -4554,7 +4561,7 @@ async function pdfProntuarioCompleto() {
       ];
       for (const [label, val] of hFields) {
         if (!val) continue;
-        if (y > 248) { doc.addPage(); pdfHeader(doc, 'Prontuário'); y = 48; }
+        if (y > 248) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
         doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
         doc.text(label + ':', M, y); y += 4.5;
         y = addText(doc, val, M, y, W - 2*M, 9, 4.5);
@@ -4569,7 +4576,7 @@ async function pdfProntuarioCompleto() {
     if (consults.length) {
       y = newSection(`Consultas (${consults.length})`);
       for (const c of consults) {
-        if (y > 240) { doc.addPage(); pdfHeader(doc, 'Prontuário'); y = 48; }
+        if (y > 240) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
         // Cabeçalho da consulta
         doc.setFillColor(240, 244, 252);
         doc.rect(M, y - 1, W - 2*M, 8, 'F');
@@ -4594,7 +4601,7 @@ async function pdfProntuarioCompleto() {
         ];
         for (const [label, val] of cFields) {
           if (!val) continue;
-          if (y > 248) { doc.addPage(); pdfHeader(doc, 'Prontuário'); y = 48; }
+          if (y > 248) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
           doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(50, 70, 100);
           doc.text(label + ':', M, y); y += 4;
           y = addText(doc, val, M, y, W - 2*M, 9, 4.5);
@@ -4611,7 +4618,7 @@ async function pdfProntuarioCompleto() {
     if (docs.length) {
       y = newSection(`Documentos Emitidos (${docs.length})`);
       for (const d of docs) {
-        if (y > 240) { doc.addPage(); pdfHeader(doc, 'Prontuário'); y = 48; }
+        if (y > 240) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
         doc.setFillColor(240, 244, 252);
         doc.rect(M, y - 1, W - 2*M, 8, 'F');
         doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.setTextColor(13, 27, 42);
@@ -4633,7 +4640,7 @@ async function pdfProntuarioCompleto() {
         if (d.type === 'receita_simples' || d.type === 'receita_especial') {
           (c.medications || []).forEach((m, i) => {
             if (!m.name) return;
-            if (y > 248) { doc.addPage(); pdfHeader(doc, 'Prontuário'); y = 48; }
+            if (y > 248) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
             doc.setFont('helvetica', 'bold'); doc.setFontSize(9);
             doc.text(`${i+1}) ${m.name}${m.concentration ? ' · ' + m.concentration : ''}`, M, y); y += 4.5;
             if (m.posology) y = addText(doc, '   ' + m.posology, M, y, W - 2*M, 9, 4.2);
@@ -4644,7 +4651,7 @@ async function pdfProntuarioCompleto() {
         } else if (d.type === 'exames') {
           (c.exams || []).forEach((e, i) => {
             if (!e.name) return;
-            if (y > 250) { doc.addPage(); pdfHeader(doc, 'Prontuário'); y = 48; }
+            if (y > 250) { doc.addPage(); pdfHeader(doc, 'Prontuário Completo'); y = 48; }
             doc.setFont('helvetica','normal'); doc.setFontSize(9);
             doc.text(`${i+1}) ${e.name}${e.specs ? ' — ' + e.specs : ''}`, M, y); y += 4.5;
           });
