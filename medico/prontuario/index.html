@@ -3599,7 +3599,7 @@ async function pdfICPStamp(doc, verifyId) {
       doc.setFontSize(6.8);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(255, 210, 70);
-      doc.text('AVANÇADA', bCx, bY + 8, { align: 'center' });
+      doc.text('QUALIFICADA', bCx, bY + 8, { align: 'center' });
 
       doc.setDrawColor(184, 154, 94);
       doc.setLineWidth(0.25);
@@ -3613,7 +3613,7 @@ async function pdfICPStamp(doc, verifyId) {
       doc.setFont('helvetica', 'normal');
       doc.text('Brasil', bX + 14, bY + 13.5);
       doc.setFontSize(8.5);
-      doc.text('+', bX + 28, bY + 13.5);
+      doc.text('<p>&#x1F510</p>', bX + 28, bY + 13.5);
 
       // Divisórias verticais
       doc.setDrawColor(150, 180, 210);
