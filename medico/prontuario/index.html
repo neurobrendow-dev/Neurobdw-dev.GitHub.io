@@ -136,6 +136,12 @@ permalink: /medico/prontuario/
     border: 1px solid #d0dae6; outline: none; font-size: 0.9rem; background: #fff;
   }
   .filters input:focus { border-color: var(--gold); }
+  .filters select {
+    padding: 10px 14px; border: 1px solid #d0dae6; outline: none;
+    font-size: 0.9rem; background: #fff; font-family: inherit; color: var(--navy);
+    min-width: 190px; cursor: pointer;
+  }
+  .filters select:focus { border-color: var(--gold); }
 
   /* Patient list */
   .patients-table { width: 100%; border-collapse: collapse; }
@@ -362,6 +368,9 @@ permalink: /medico/prontuario/
 
     <div class="filters">
       <input type="search" id="search-input" placeholder="Buscar por nome, CPF ou telefone...">
+      <select id="filter-plan">
+        <option value="">Todos os convênios</option>
+      </select>
     </div>
 
     <div id="patients-container">
@@ -564,6 +573,17 @@ async function loadHealthPlansDB() {
     return;
   }
   healthPlans = data || [];
+  populatePlanFilter();
+}
+
+function populatePlanFilter() {
+  const sel = document.getElementById('filter-plan');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">Todos os convênios</option>' +
+    '<option value="__particular__">Particular / Nenhum</option>' +
+    healthPlans.map(hp => `<option value="${escapeHtml(hp.name)}">${escapeHtml(hp.name)}</option>`).join('');
+  if (prev) sel.value = prev;
 }
 
 function buildHealthPlanOptions(currentValue) {
@@ -935,6 +955,7 @@ function renderPatients(list) {
       <thead>
         <tr>
           <th>Paciente</th>
+          <th>Convênio</th>
           <th>Idade</th>
           <th>CPF</th>
           <th>Consultas</th>
@@ -948,6 +969,7 @@ function renderPatients(list) {
               <strong>${escapeHtml(p.full_name)}</strong>
               ${p.phone ? `<div class="num" style="font-size:0.8rem; color:#7a8a9c;">${escapeHtml(p.phone)}</div>` : ''}
             </td>
+            <td style="font-size:0.85rem;color:var(--steel);">${escapeHtml(p.health_plan || '—')}</td>
             <td class="num">${age(p.birth_date) ?? '—'}</td>
             <td class="num">${escapeHtml(p.cpf || '—')}</td>
             <td class="num">${p.total_consultations || 0}</td>
@@ -961,24 +983,35 @@ function renderPatients(list) {
   });
 }
 
-$('search-input').oninput = (e) => {
-  const q = e.target.value.trim().toLowerCase();
-  if (!q) return renderPatients(allPatients);
-  renderPatients(allPatients.filter(p =>
+function applyPatientFilters() {
+  const q    = ($('search-input').value || '').trim().toLowerCase();
+  const plan = ($('filter-plan')?.value || '');
+  let list = allPatients;
+  if (q) list = list.filter(p =>
     (p.full_name || '').toLowerCase().includes(q) ||
     (p.cpf || '').toLowerCase().includes(q) ||
-    (p.phone || '').toLowerCase().includes(q)
-  ));
-};
+    (p.phone || '').toLowerCase().includes(q));
+  if (plan === '__particular__') list = list.filter(p => !p.health_plan);
+  else if (plan) list = list.filter(p => p.health_plan === plan);
+  renderPatients(list);
+}
 
-$('btn-new-patient').onclick = () => openPatientForm(null);
+$('search-input').oninput = applyPatientFilters;
+$('filter-plan').onchange = applyPatientFilters;
+
+$('btn-new-patient').onclick = () => {
+  const plan = $('filter-plan')?.value || '';
+  const preset = (plan && plan !== '__particular__') ? plan : '';
+  openPatientForm(null, preset);
+};
 
 /* ===========================================================
    FORM DE PACIENTE (criar/editar)
 =========================================================== */
-function openPatientForm(patient) {
+function openPatientForm(patient, presetPlan) {
   const isNew = !patient;
   const p = patient || {};
+  if (isNew && presetPlan) p.health_plan = presetPlan;
   openModal({
     title: isNew ? 'Novo paciente' : 'Editar dados',
     size: 'lg',
