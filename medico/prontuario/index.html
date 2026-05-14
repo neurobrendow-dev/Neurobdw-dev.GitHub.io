@@ -878,12 +878,20 @@ async function onSignedIn(user) {
     <a class="btn-link" href="/medico/">← MENU PRINCIPAL</a>
     <button class="btn-icp" id="btn-pending-global" title="Ver todos os documentos pendentes de assinatura" style="display:none;">⏳ <span id="pending-count">0</span> pendentes</button>
     <button class="btn-icp" id="btn-icp" title="Carregar certificado ICP-Brasil para assinar documentos">🔏 ICP-Brasil</button>
+    <label id="lbl-solo-elet" title="Documentos conterão apenas assinatura eletrônica — carimbo fica acima da linha de assinatura" style="display:inline-flex;align-items:center;gap:5px;font-size:0.72rem;color:rgba(200,216,232,0.7);cursor:pointer;letter-spacing:0.04em;user-select:none;">
+      <input type="checkbox" id="chk-solo-elet" style="accent-color:#b89a5e;width:13px;height:13px;cursor:pointer;" ${sigState.soloElectronic ? 'checked' : ''}>
+      Apenas eletrônica
+    </label>
     <button class="btn-link" id="btn-ai-config" title="Configurar IA">⚙ IA</button>
     <span class="topbar-user">Dr(a). ${escapeHtml(profile.full_name.split(' ')[0])}</span>
     <button class="btn-link" id="btn-logout">Sair</button>
   `;
   $('btn-pending-global').onclick = openGlobalPendingModal;
   $('btn-icp').onclick = openCertModal;
+  $('chk-solo-elet').onchange = function() {
+    sigState.soloElectronic = this.checked;
+    localStorage.setItem('pref_soloElectronic', this.checked ? '1' : '0');
+  };
   $('btn-ai-config').onclick = openAIConfig;
   $('btn-logout').onclick = async () => { await sb.auth.signOut(); };
   autoLoadCert();
@@ -3309,6 +3317,8 @@ const sigState = {
   _resolve: null,   // resolvido ao final da assinatura em background
   // replay: reproduz carimbo de assinatura já registrada (PDF de doc já assinado)
   replayStamp: null, // { verifyId, cn, issuer, serial, signedAt }
+  // preferência: carimbo acima da linha, sem espaço para ass. física
+  soloElectronic: localStorage.getItem('pref_soloElectronic') === '1',
 };
 
 function showToast(msg, isErr = false) {
@@ -3569,7 +3579,8 @@ async function pdfICPStamp(doc, verifyId) {
       // Portrait: selo visual completo
       const M   = 18;
       const bX  = M;
-      const bY  = 270;   // topo do carimbo (CRM em y=264, gap de 6mm)
+      // soloElectronic: carimbo acima da linha (246–263); normal: abaixo do CRM (270–287)
+      const bY  = sigState.soloElectronic ? 246 : 270;
       const sW  = pgW - 2 * M;  // 174mm
       const sH  = 17;   // altura do carimbo (termina em y=287, info em y=290)
       const bdW = 34;   // largura do badge ICP (esquerda)
@@ -3689,18 +3700,40 @@ async function storeSigSupabase(verifyId, hashHex, sigB64, filename, meta) {
 function pdfFooter(doc) {
   const W = 210, M = 18;
   const pages = doc.internal.getNumberOfPages();
-  const signing = sigState.signingNow;
-  // Quando assinando: sobe 14mm para abrir espaço ao carimbo (bY=270, sH=15 → y=270–285)
-  const yLine = signing ? 254 : 268;
-  const yName = signing ? 259 : 273;
-  const yCRM  = signing ? 264 : 278;
-  const yInfo = signing ? 290 : 290;
+  const signing  = sigState.signingNow;
+  const solo     = sigState.soloElectronic;
+
+  // soloElectronic: carimbo vai ACIMA da linha → linha fica na posição normal
+  // signing normal: linha sobe 14mm para abrir espaço ao carimbo abaixo
+  const yLine = (!solo && signing) ? 254 : 268;
+  const yName = (!solo && signing) ? 259 : 273;
+  const yCRM  = (!solo && signing) ? 264 : 278;
+  const yInfo = 290;
+
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
+
+    // Placeholder pontilhado quando soloElectronic e ainda não assinado
+    if (solo && !signing) {
+      const bX = M, bY_ph = 246, sW = W - 2 * M, sH = 17;
+      doc.setFillColor(246, 248, 252);
+      doc.setDrawColor(180, 200, 220);
+      doc.setLineWidth(0.25);
+      doc.roundedRect(bX, bY_ph, sW, sH, 1.5, 1.5, 'FD');
+      doc.setFontSize(6);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(160, 175, 195);
+      doc.text('ASSINATURA ELETRÔNICA', W / 2, bY_ph + 7.5, { align: 'center' });
+      doc.setFontSize(5.5);
+      doc.setFont('helvetica', 'normal');
+      doc.text('(carimbo digital será inserido ao assinar)', W / 2, bY_ph + 12, { align: 'center' });
+    }
+
     doc.setDrawColor(13, 27, 42);
     doc.setLineWidth(0.4);
     doc.line(W / 2 - 38, yLine, W / 2 + 38, yLine);
     doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
     doc.setTextColor(13, 27, 42);
     doc.text(DOCTOR_NAME, W / 2, yName, { align: 'center' });
     doc.setFontSize(8);
