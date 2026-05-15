@@ -2441,9 +2441,10 @@ async function generatePatientPDF(){
       doc.setFontSize(13); doc.setTextColor(13,27,42);
       doc.text('Crises registradas', M, y); y += 4;
       doc.line(M, y, M+35, y); y += 2;
+      const effectiveLabel = { yes: 'Aliviou', partial: 'Parcial', no: 'Não aliviou' };
       doc.autoTable({
         startY: y + 2, margin: { left: M, right: M },
-        head: [['Data', 'Int.', 'Dur.', 'Lado', 'Região', 'Sintomas', 'Gatilhos']],
+        head: [['Data', 'Int.', 'Dur.', 'Lado', 'Região', 'Sintomas', 'Gatilhos', 'Medicação / Resposta']],
         body: cachedEntries.map(e => [
           fmtDate(e.started_at),
           e.intensity + '/10',
@@ -2451,7 +2452,11 @@ async function generatePatientPDF(){
           LABELS.side[e.location_side] || '—',
           (e.location_regions||[]).map(r => LABELS.region[r] || r).join(', ') || '—',
           (e.symptoms||[]).map(s => LABELS.symptom[s] || s).join(', ') || '—',
-          [...(e.triggers||[]).map(t => LABELS.trigger[t] || t), e.triggers_other].filter(Boolean).join(', ') || '—'
+          [...(e.triggers||[]).map(t => LABELS.trigger[t] || t), e.triggers_other].filter(Boolean).join(', ') || '—',
+          (e.medications||[]).filter(m => m.name).map(m => {
+            const resp = m.effective ? ` (${effectiveLabel[m.effective] || m.effective})` : '';
+            return `${m.name}${m.dose ? ' ' + m.dose : ''}${resp}`;
+          }).join('; ') || '—'
         ]),
         styles: { font: 'helvetica', fontSize: 7.5, cellPadding: 2, textColor: [13,27,42] },
         headStyles: { fillColor: [13,27,42], textColor: [212,185,122], fontStyle: 'bold' },
