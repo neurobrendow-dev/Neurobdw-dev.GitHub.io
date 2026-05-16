@@ -290,6 +290,23 @@ permalink: /medico/prontuario/
   .med-editor { border: 1px solid #d8e4f0; padding: 12px; margin-bottom: 8px; }
   .med-editor + .med-editor { margin-top: 8px; }
 
+  /* Exam group header editor */
+  .exam-group-header-editor {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; margin-bottom: 4px;
+    background: #f0f5fb; border-left: 3px solid var(--gold);
+  }
+  .exam-group-header-editor .group-label-input {
+    flex: 1; border: none; border-bottom: 1px solid var(--gold);
+    background: transparent; font-size: 0.9rem; font-weight: 600;
+    color: var(--navy); padding: 2px 0; outline: none;
+    font-family: inherit;
+  }
+  .exam-group-header-editor .group-tag {
+    font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--gold); white-space: nowrap; font-weight: 500;
+  }
+
   /* CID picker */
   .cid-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .cid-tag {
@@ -2687,9 +2704,12 @@ function openDocForm(type, doc) {
         </div>
       </div>
       <div id="exams-list">
-        ${exams.map((e,i) => examEditorHTML(e,i)).join('')}
+        ${(() => { let idx = 0; return exams.map(e => e.groupHeader ? examGroupHeaderHTML(e.label) : examEditorHTML(e, idx++)).join(''); })()}
       </div>
-      <button type="button" class="btn-secondary" id="btn-add-exam" style="margin-bottom:14px;">+ Adicionar exame manual</button>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button type="button" class="btn-secondary" id="btn-add-exam">+ Adicionar exame</button>
+        <button type="button" class="btn-ghost" id="btn-add-section">+ Adicionar seção</button>
+      </div>
       <div class="msg info" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;">
         <input type="checkbox" id="ex-one-exam-per-page" ${c.oneExamPerPage ? 'checked' : ''} style="width:auto;margin-top:2px;">
         <label for="ex-one-exam-per-page" style="font-size:0.84rem;line-height:1.45;cursor:pointer;">
@@ -2714,11 +2734,16 @@ function openDocForm(type, doc) {
     `;
     getContent = (m) => {
       const list = [];
-      m.querySelectorAll('.exam-editor').forEach(ed => {
-        const name = ed.querySelector('[data-f=name]').value.trim();
-        const specs = ed.querySelector('[data-f=specs]').value.trim();
-        const pageBreakBefore = !!ed.querySelector('[data-f=page-break-before]')?.checked;
-        if (name) list.push({ name, specs, pageBreakBefore });
+      m.querySelectorAll('.exam-editor, .exam-group-header-editor').forEach(ed => {
+        if (ed.classList.contains('exam-group-header-editor')) {
+          const label = ed.querySelector('[data-f=group-label]').value.trim();
+          if (label) list.push({ groupHeader: true, label });
+        } else {
+          const name = ed.querySelector('[data-f=name]').value.trim();
+          const specs = ed.querySelector('[data-f=specs]').value.trim();
+          const pageBreakBefore = !!ed.querySelector('[data-f=page-break-before]')?.checked;
+          if (name) list.push({ name, specs, pageBreakBefore });
+        }
       });
       return {
         exams: list,
@@ -2877,9 +2902,16 @@ function openDocForm(type, doc) {
       const addExam = m.querySelector('#btn-add-exam');
       if (addExam) addExam.onclick = () => {
         const list = m.querySelector('#exams-list');
-        const i = list.children.length;
-        list.insertAdjacentHTML('beforeend', examEditorHTML({}, i));
+        list.insertAdjacentHTML('beforeend', examEditorHTML({}, list.children.length));
         wireExamRemovers(m);
+      };
+      const addSection = m.querySelector('#btn-add-section');
+      if (addSection) addSection.onclick = () => {
+        const list = m.querySelector('#exams-list');
+        list.insertAdjacentHTML('beforeend', examGroupHeaderHTML(''));
+        wireExamRemovers(m);
+        const inp = list.lastElementChild?.querySelector('[data-f=group-label]');
+        if (inp) inp.focus();
       };
       wireExamRemovers(m);
 
@@ -3317,11 +3349,22 @@ function examEditorHTML(e, i) {
       <button type="button" class="btn-ghost exam-rm" style="color:var(--danger);font-size:0.74rem;">Remover</button>
     </div>`;
 }
+function examGroupHeaderHTML(label) {
+  return `
+    <div class="exam-group-header-editor">
+      <span class="group-tag">Seção</span>
+      <input class="group-label-input" data-f="group-label" value="${escapeHtml(label || '')}" placeholder="Nome da seção (ex: Laboratório, Neuroimagem…)">
+      <button type="button" class="btn-ghost exam-rm" style="color:var(--danger);font-size:0.74rem;white-space:nowrap;">Remover</button>
+    </div>`;
+}
 function wireExamRemovers(m) {
   m.querySelectorAll('.exam-rm').forEach(b => {
     b.onclick = () => {
       const list = m.querySelector('#exams-list');
-      if (list && list.children.length > 1) b.closest('.exam-editor').remove();
+      const headerEl = b.closest('.exam-group-header-editor');
+      if (headerEl) { headerEl.remove(); return; }
+      const examCount = list ? list.querySelectorAll('.exam-editor').length : 0;
+      if (examCount > 1) b.closest('.exam-editor').remove();
       else alert('Mantenha ao menos 1 exame.');
     };
   });
@@ -4077,21 +4120,35 @@ function contentForMedicationPrintGroup(content, group, includeInstructions) {
 }
 
 function getExamPrintGroups(content) {
-  const exams = (content?.exams || []).filter(e => e && e.name);
-  const items = exams.map((exam, index) => ({ exam, index }));
-  if (!items.length) return [];
-  if (content?.oneExamPerPage) return items.map(item => [item]);
+  const all = (content?.exams || []).filter(e => e && (e.name || e.groupHeader));
+  if (!all.length) return [];
+
+  // Build flat item list with sequential exam indices
+  let examIndex = 0;
+  const items = all.map(e =>
+    e.groupHeader
+      ? { isHeader: true, label: e.label }
+      : { exam: e, index: examIndex++ }
+  );
+
+  if (content?.oneExamPerPage) {
+    // Each exam on its own page; headers attach to the following exam's page
+    const pages = [];
+    let pending = [];
+    items.forEach(item => {
+      if (item.isHeader) { pending.push(item); return; }
+      pages.push([...pending, item]);
+      pending = [];
+    });
+    if (pending.length) pages.push(pending);
+    return pages;
+  }
 
   const groups = [];
   let current = [];
-  items.forEach((item) => {
-    if (item.exam.pageBreakBefore) {
-      if (current.length) {
-        groups.push(current);
-        current = [];
-      }
-      groups.push([item]);
-      return;
+  items.forEach(item => {
+    if (!item.isHeader && item.exam.pageBreakBefore) {
+      if (current.length) { groups.push(current); current = []; }
     }
     current.push(item);
   });
@@ -4461,7 +4518,23 @@ function pdfExames(d, label) {
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
     doc.text('Solicito', M, y); y += 6;
     doc.setFont('helvetica','normal'); doc.setFontSize(10);
-    group.forEach(({ exam: e, index }) => {
+    group.forEach(item => {
+      if (item.isHeader) {
+        y += 3;
+        if (y > 255) newPage();
+        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+        doc.setTextColor(90, 111, 133);
+        doc.text((item.label || '').toUpperCase(), M, y);
+        doc.setDrawColor(200, 216, 232);
+        doc.setLineWidth(0.2);
+        doc.line(M + doc.getTextWidth((item.label || '').toUpperCase()) + 2, y - 1, W - M, y - 1);
+        doc.setTextColor(13, 27, 42);
+        doc.setFont('helvetica','normal'); doc.setFontSize(10);
+        doc.setLineWidth(0.3);
+        y += 5;
+        return;
+      }
+      const { exam: e, index } = item;
       if (y > 255) newPage();
       const txt = `${index + 1}.  ${e.name}${e.specs ? '  —  ' + e.specs : ''}`;
       writeWrapped(txt, M, W - 2*M, 6);
