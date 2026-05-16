@@ -580,7 +580,6 @@ async function loadHealthPlansDB() {
   const { data, error } = await sb
     .from('emr_health_plans')
     .select('*')
-    .eq('doctor_id', currentUser.id)
     .order('name', { ascending: true });
   if (error) {
     console.warn('emr_health_plans indisponível — execute a migration SQL:', error.message);
@@ -695,7 +694,7 @@ function openManageHealthPlans(onChanged) {
               if (idx >= 0) healthPlans[idx] = data;
             } else {
               const { data, error } = await sb.from('emr_health_plans')
-                .insert({ name, address, city, phone, created_by: currentUser.id, doctor_id: currentUser.id })
+                .insert({ name, address, city, phone, created_by: currentUser.id })
                 .select().single();
               if (error) throw error;
               healthPlans.push(data);
@@ -748,7 +747,6 @@ async function loadCustomExamGroups() {
   const { data, error } = await sb
     .from('emr_exam_groups')
     .select('*')
-    .eq('doctor_id', currentUser.id)
     .order('name', { ascending: true });
   if (error) {
     console.warn('emr_exam_groups indisponível (rode supabase-migration-prontuario-extras.sql):', error.message);
@@ -953,10 +951,9 @@ async function onSignedIn(user) {
    LISTA DE PACIENTES
 =========================================================== */
 async function loadPatients() {
-  const uid = currentUser.id;
   const [summaryRes, planRes] = await Promise.all([
-    sb.from('emr_patient_summary').select('*').eq('doctor_id', uid).order('last_consultation_at', { ascending: false, nullsFirst: false }),
-    sb.from('emr_patients').select('id, health_plan').eq('doctor_id', uid)
+    sb.from('emr_patient_summary').select('*').order('last_consultation_at', { ascending: false, nullsFirst: false }),
+    sb.from('emr_patients').select('id, health_plan')
   ]);
   if (summaryRes.error) {
     setHTML('patients-container', `<div class="msg error">Erro: ${escapeHtml(summaryRes.error.message)}</div>`);
@@ -1151,7 +1148,6 @@ function openPatientForm(patient, presetPlan) {
         try {
           if (isNew) {
             payload.created_by = currentUser.id;
-            payload.doctor_id  = currentUser.id;
             const { data, error } = await sb.from('emr_patients').insert(payload).select().single();
             if (error) throw error;
             closeModal();
@@ -1191,12 +1187,11 @@ async function openPatient(id) {
   setHTML('d-docs', '');
   switchTab('resumo');
 
-  const uid = currentUser.id;
   const [pat, hist, cons, docs] = await Promise.all([
-    sb.from('emr_patients').select('*').eq('id', id).eq('doctor_id', uid).single(),
-    sb.from('emr_medical_history').select('*').eq('patient_id', id).eq('doctor_id', uid).maybeSingle(),
-    sb.from('emr_consultations').select('*').eq('patient_id', id).eq('doctor_id', uid).order('consultation_date', { ascending: false }),
-    sb.from('emr_documents').select('*').eq('patient_id', id).eq('doctor_id', uid).order('issue_date', { ascending: false })
+    sb.from('emr_patients').select('*').eq('id', id).single(),
+    sb.from('emr_medical_history').select('*').eq('patient_id', id).maybeSingle(),
+    sb.from('emr_consultations').select('*').eq('patient_id', id).order('consultation_date', { ascending: false }),
+    sb.from('emr_documents').select('*').eq('patient_id', id).order('issue_date', { ascending: false })
   ]);
   if (pat.error) { alertErr(pat.error); backToList(); return; }
   currentPatient = pat.data;
@@ -1275,7 +1270,7 @@ $('form-history').onsubmit = async (e) => {
   e.preventDefault();
   setMsg('d-history-msg','','');
   const fd = new FormData(e.target);
-  const payload = { patient_id: currentPatient.id, doctor_id: currentUser.id };
+  const payload = { patient_id: currentPatient.id };
   for (const [k, v] of fd.entries()) payload[k] = v.trim() === '' ? null : v.trim();
   try {
     const { error } = await sb.from('emr_medical_history').upsert(payload);
@@ -1617,7 +1612,7 @@ function openConsultForm(c) {
         const f = modal.querySelector('#form-consult');
         if (!f) return null;
         const fd = new FormData(f);
-        const p = { patient_id: currentPatient.id, cid_codes: cidCodes, doctor_id: currentUser.id };
+        const p = { patient_id: currentPatient.id, cid_codes: cidCodes };
         for (const [k, v] of fd.entries()) {
           if (k === 'consultation_date') { try { p[k] = new Date(v).toISOString(); } catch { p[k] = null; } }
           else p[k] = v.trim() === '' ? null : v.trim();
@@ -2412,15 +2407,14 @@ document.querySelectorAll('.doc-creator-btn').forEach(b => {
    PENDENTES DE ASSINATURA — visão global (todos os pacientes)
 =========================================================== */
 async function loadGlobalPending() {
-  const uid = currentUser.id;
   const [docsRes, consultsRes] = await Promise.all([
     sb.from('emr_documents')
       .select('id, type, title, issue_date, patient_id, emr_patients(full_name)')
-      .eq('is_signed', false).eq('doctor_id', uid)
+      .eq('is_signed', false)
       .order('issue_date', { ascending: false }),
     sb.from('emr_consultations')
       .select('id, type, consultation_date, chief_complaint, hypothesis, patient_id, emr_patients(full_name)')
-      .eq('is_signed', false).eq('doctor_id', uid)
+      .eq('is_signed', false)
       .order('consultation_date', { ascending: false }),
   ]);
   const docs     = (docsRes.data    || []).map(d => ({ ...d, _kind: 'doc',     _patientName: d.emr_patients?.full_name || '—' }));
@@ -2437,10 +2431,9 @@ async function refreshGlobalPendingCount() {
   const badge = document.getElementById('pending-count');
   if (!btn || !badge) return;
   try {
-    const uid = currentUser.id;
     const [d, c] = await Promise.all([
-      sb.from('emr_documents').select('id', { count: 'exact', head: true }).eq('is_signed', false).eq('doctor_id', uid),
-      sb.from('emr_consultations').select('id', { count: 'exact', head: true }).eq('is_signed', false).eq('doctor_id', uid),
+      sb.from('emr_documents').select('id', { count: 'exact', head: true }).eq('is_signed', false),
+      sb.from('emr_consultations').select('id', { count: 'exact', head: true }).eq('is_signed', false),
     ]);
     const total = (d.count || 0) + (c.count || 0);
     badge.textContent = total;
@@ -2935,8 +2928,7 @@ function openDocForm(type, doc) {
           const { data, error } = await sb.from('emr_exam_groups').insert({
             name: name.trim(),
             exams: list,
-            created_by: currentUser.id,
-            doctor_id: currentUser.id
+            created_by: currentUser.id
           }).select().single();
           if (error) throw error;
           customExamGroups.push(data);
@@ -2977,7 +2969,6 @@ function openDocForm(type, doc) {
         try {
           const payload = {
             patient_id: currentPatient.id,
-            doctor_id: currentUser.id,
             type,
             title: m.querySelector('#doc-title').value.trim() || defaultTitle,
             issue_date: m.querySelector('#doc-issue-date').value || new Date().toISOString().slice(0,10),
@@ -3032,7 +3023,6 @@ function openDocForm(type, doc) {
         try {
           const payload = {
             patient_id: currentPatient.id,
-            doctor_id: currentUser.id,
             type,
             title: m.querySelector('#doc-title').value.trim() || defaultTitle,
             issue_date: m.querySelector('#doc-issue-date').value || new Date().toISOString().slice(0,10),
