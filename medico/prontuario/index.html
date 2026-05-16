@@ -290,21 +290,19 @@ permalink: /medico/prontuario/
   .med-editor { border: 1px solid #d8e4f0; padding: 12px; margin-bottom: 8px; }
   .med-editor + .med-editor { margin-top: 8px; }
 
-  /* Exam group header editor */
-  .exam-group-header-editor {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 12px; margin-bottom: 4px;
-    background: #f0f5fb; border-left: 3px solid var(--gold);
+  /* Exam page-group badge */
+  .exam-page-badge {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; min-width: 48px;
   }
-  .exam-group-header-editor .group-label-input {
-    flex: 1; border: none; border-bottom: 1px solid var(--gold);
-    background: transparent; font-size: 0.9rem; font-weight: 600;
-    color: var(--navy); padding: 2px 0; outline: none;
-    font-family: inherit;
+  .exam-page-badge label {
+    font-size: 0.65rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--gold); font-weight: 600; white-space: nowrap;
   }
-  .exam-group-header-editor .group-tag {
-    font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase;
-    color: var(--gold); white-space: nowrap; font-weight: 500;
+  .exam-page-badge input[type=number] {
+    width: 48px; text-align: center; font-size: 1rem; font-weight: 700;
+    color: var(--navy); border: 2px solid var(--gold); padding: 4px 2px;
+    background: #fffdf7; outline: none;
   }
 
   /* CID picker */
@@ -2703,19 +2701,13 @@ function openDocForm(type, doc) {
           <span class="form-hint">"Adicionar" anexa ao final; "Substituir" troca a lista pelo pacote.</span>
         </div>
       </div>
+      <div class="msg info" style="margin-bottom:10px;padding:8px 12px;font-size:0.82rem;">
+        O número <strong>Folha</strong> em cada exame define em qual página do PDF ele aparece. Exames com o mesmo número ficam juntos na mesma folha.
+      </div>
       <div id="exams-list">
-        ${(() => { let idx = 0; return exams.map(e => e.groupHeader ? examGroupHeaderHTML(e.label) : examEditorHTML(e, idx++)).join(''); })()}
+        ${exams.map((e,i) => examEditorHTML(e,i)).join('')}
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <button type="button" class="btn-secondary" id="btn-add-exam">+ Adicionar exame</button>
-        <button type="button" class="btn-ghost" id="btn-add-section">+ Adicionar seção</button>
-      </div>
-      <div class="msg info" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;">
-        <input type="checkbox" id="ex-one-exam-per-page" ${c.oneExamPerPage ? 'checked' : ''} style="width:auto;margin-top:2px;">
-        <label for="ex-one-exam-per-page" style="font-size:0.84rem;line-height:1.45;cursor:pointer;">
-          Imprimir um exame por folha no PDF. Se preferir separar apenas alguns, use a opção "Deixar este exame sozinho em uma folha" dentro de cada exame.
-        </label>
-      </div>
+      <button type="button" class="btn-secondary" id="btn-add-exam" style="margin-bottom:14px;">+ Adicionar exame</button>
       <datalist id="exam-catalog">
         ${(window.EXAM_CATALOG || []).map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}
       </datalist>
@@ -2734,20 +2726,14 @@ function openDocForm(type, doc) {
     `;
     getContent = (m) => {
       const list = [];
-      m.querySelectorAll('.exam-editor, .exam-group-header-editor').forEach(ed => {
-        if (ed.classList.contains('exam-group-header-editor')) {
-          const label = ed.querySelector('[data-f=group-label]').value.trim();
-          if (label) list.push({ groupHeader: true, label });
-        } else {
-          const name = ed.querySelector('[data-f=name]').value.trim();
-          const specs = ed.querySelector('[data-f=specs]').value.trim();
-          const pageBreakBefore = !!ed.querySelector('[data-f=page-break-before]')?.checked;
-          if (name) list.push({ name, specs, pageBreakBefore });
-        }
+      m.querySelectorAll('.exam-editor').forEach(ed => {
+        const name = ed.querySelector('[data-f=name]').value.trim();
+        const specs = ed.querySelector('[data-f=specs]').value.trim();
+        const pageGroup = parseInt(ed.querySelector('[data-f=page-group]')?.value, 10) || 1;
+        if (name) list.push({ name, specs, pageGroup });
       });
       return {
         exams: list,
-        oneExamPerPage: !!m.querySelector('#ex-one-exam-per-page')?.checked,
         indication: m.querySelector('#ex-indication').value.trim(),
         cid: m.querySelector('#ex-cid').value.trim()
       };
@@ -2902,16 +2888,11 @@ function openDocForm(type, doc) {
       const addExam = m.querySelector('#btn-add-exam');
       if (addExam) addExam.onclick = () => {
         const list = m.querySelector('#exams-list');
-        list.insertAdjacentHTML('beforeend', examEditorHTML({}, list.children.length));
+        // Sugere o mesmo número de folha do último exame
+        const last = list.lastElementChild?.querySelector('[data-f=page-group]');
+        const lastPg = last ? (parseInt(last.value, 10) || 1) : 1;
+        list.insertAdjacentHTML('beforeend', examEditorHTML({ pageGroup: lastPg }, list.children.length));
         wireExamRemovers(m);
-      };
-      const addSection = m.querySelector('#btn-add-section');
-      if (addSection) addSection.onclick = () => {
-        const list = m.querySelector('#exams-list');
-        list.insertAdjacentHTML('beforeend', examGroupHeaderHTML(''));
-        wireExamRemovers(m);
-        const inp = list.lastElementChild?.querySelector('[data-f=group-label]');
-        if (inp) inp.focus();
       };
       wireExamRemovers(m);
 
@@ -3330,39 +3311,32 @@ function openManageGroups(onChange) {
 }
 
 function examEditorHTML(e, i) {
+  const pg = e.pageGroup || 1;
   return `
-    <div class="exam-editor med-editor">
-      <div class="form-row cols-2">
-        <div class="form-group">
-          <label>Exame</label>
-          <input data-f="name" list="exam-catalog" value="${escapeHtml(e.name || '')}" placeholder="Comece a digitar para autocomplete">
-        </div>
-        <div class="form-group">
-          <label>Especificações</label>
-          <input data-f="specs" value="${escapeHtml(e.specs || '')}" placeholder="ex: com contraste">
-        </div>
+    <div class="exam-editor med-editor" style="display:flex;align-items:flex-start;gap:12px;">
+      <div class="exam-page-badge">
+        <label>Folha</label>
+        <input type="number" data-f="page-group" min="1" max="20" value="${pg}" title="Exames com o mesmo número aparecem na mesma folha do PDF">
       </div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;color:#5a6f85;margin:2px 0 8px;cursor:pointer;">
-        <input type="checkbox" data-f="page-break-before" ${e.pageBreakBefore ? 'checked' : ''} style="width:auto;">
-        Deixar este exame sozinho em uma folha no PDF
-      </label>
-      <button type="button" class="btn-ghost exam-rm" style="color:var(--danger);font-size:0.74rem;">Remover</button>
-    </div>`;
-}
-function examGroupHeaderHTML(label) {
-  return `
-    <div class="exam-group-header-editor">
-      <span class="group-tag">Seção</span>
-      <input class="group-label-input" data-f="group-label" value="${escapeHtml(label || '')}" placeholder="Nome da seção (ex: Laboratório, Neuroimagem…)">
-      <button type="button" class="btn-ghost exam-rm" style="color:var(--danger);font-size:0.74rem;white-space:nowrap;">Remover</button>
+      <div style="flex:1;">
+        <div class="form-row cols-2" style="margin-bottom:6px;">
+          <div class="form-group">
+            <label>Exame</label>
+            <input data-f="name" list="exam-catalog" value="${escapeHtml(e.name || '')}" placeholder="Comece a digitar para autocomplete">
+          </div>
+          <div class="form-group">
+            <label>Especificações</label>
+            <input data-f="specs" value="${escapeHtml(e.specs || '')}" placeholder="ex: com contraste">
+          </div>
+        </div>
+        <button type="button" class="btn-ghost exam-rm" style="color:var(--danger);font-size:0.74rem;">Remover</button>
+      </div>
     </div>`;
 }
 function wireExamRemovers(m) {
   m.querySelectorAll('.exam-rm').forEach(b => {
     b.onclick = () => {
       const list = m.querySelector('#exams-list');
-      const headerEl = b.closest('.exam-group-header-editor');
-      if (headerEl) { headerEl.remove(); return; }
       const examCount = list ? list.querySelectorAll('.exam-editor').length : 0;
       if (examCount > 1) b.closest('.exam-editor').remove();
       else alert('Mantenha ao menos 1 exame.');
@@ -4120,40 +4094,23 @@ function contentForMedicationPrintGroup(content, group, includeInstructions) {
 }
 
 function getExamPrintGroups(content) {
-  const all = (content?.exams || []).filter(e => e && (e.name || e.groupHeader));
-  if (!all.length) return [];
+  const exams = (content?.exams || []).filter(e => e && e.name);
+  if (!exams.length) return [];
 
-  // Build flat item list with sequential exam indices
-  let examIndex = 0;
-  const items = all.map(e =>
-    e.groupHeader
-      ? { isHeader: true, label: e.label }
-      : { exam: e, index: examIndex++ }
-  );
-
-  if (content?.oneExamPerPage) {
-    // Each exam on its own page; headers attach to the following exam's page
-    const pages = [];
-    let pending = [];
-    items.forEach(item => {
-      if (item.isHeader) { pending.push(item); return; }
-      pages.push([...pending, item]);
-      pending = [];
-    });
-    if (pending.length) pages.push(pending);
-    return pages;
-  }
-
-  const groups = [];
-  let current = [];
-  items.forEach(item => {
-    if (!item.isHeader && item.exam.pageBreakBefore) {
-      if (current.length) { groups.push(current); current = []; }
-    }
-    current.push(item);
+  // Group by pageGroup number (default 1), preserving order within each group
+  const groupMap = new Map();
+  exams.forEach(exam => {
+    const pg = exam.pageGroup || 1;
+    if (!groupMap.has(pg)) groupMap.set(pg, []);
+    groupMap.get(pg).push(exam);
   });
-  if (current.length) groups.push(current);
-  return groups;
+
+  // Pages sorted by group number; exam numbering is sequential across all pages
+  const sortedKeys = [...groupMap.keys()].sort((a, b) => a - b);
+  let counter = 0;
+  return sortedKeys.map(k =>
+    groupMap.get(k).map(exam => ({ exam, index: counter++ }))
+  );
 }
 
 /* ===========================================================
@@ -4518,23 +4475,7 @@ function pdfExames(d, label) {
     doc.setFont('helvetica','bold'); doc.setFontSize(11);
     doc.text('Solicito', M, y); y += 6;
     doc.setFont('helvetica','normal'); doc.setFontSize(10);
-    group.forEach(item => {
-      if (item.isHeader) {
-        y += 3;
-        if (y > 255) newPage();
-        doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
-        doc.setTextColor(90, 111, 133);
-        doc.text((item.label || '').toUpperCase(), M, y);
-        doc.setDrawColor(200, 216, 232);
-        doc.setLineWidth(0.2);
-        doc.line(M + doc.getTextWidth((item.label || '').toUpperCase()) + 2, y - 1, W - M, y - 1);
-        doc.setTextColor(13, 27, 42);
-        doc.setFont('helvetica','normal'); doc.setFontSize(10);
-        doc.setLineWidth(0.3);
-        y += 5;
-        return;
-      }
-      const { exam: e, index } = item;
+    group.forEach(({ exam: e, index }) => {
       if (y > 255) newPage();
       const txt = `${index + 1}.  ${e.name}${e.specs ? '  —  ' + e.specs : ''}`;
       writeWrapped(txt, M, W - 2*M, 6);
