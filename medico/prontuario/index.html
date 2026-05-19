@@ -3349,11 +3349,11 @@ function wireExamRemovers(m) {
 =========================================================== */
 function pdfHeader(doc, label) {
   const W = 210, M = 18;
-  // Barra dourada fina no topo
+  // Barra azul fina no topo
   doc.setFillColor(184, 154, 94);
   doc.rect(0, 0, W, 2.5, 'F');
   // Label (tipo de documento) em dourado
-  doc.setTextColor(184, 154, 94);
+  doc.setTextColor(13, 27, 42);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
   doc.text(label.toUpperCase(), M, 11);
