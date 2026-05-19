@@ -503,9 +503,8 @@ permalink: /medico/prontuario/
 
     <!-- TAB EXAMES COMPLEMENTARES -->
     <div class="tab-panel" data-tab="exames">
-      <div class="btn-row" style="margin-bottom:16px;gap:8px;">
-        <button class="btn-primary" id="btn-new-exam-req">+ Nova solicitação</button>
-        <button class="btn-secondary" id="btn-new-exam-res">+ Registrar resultado</button>
+      <div class="btn-row" style="margin-bottom:16px;">
+        <button class="btn-primary" id="btn-new-exam-res">+ Registrar resultado</button>
       </div>
       <div id="d-exames"></div>
     </div>
@@ -1333,54 +1332,41 @@ function switchTab(name) {
 }
 
 function renderExames() {
-  const examDocs = (currentDocs || []).filter(d => d.type === 'exames' || d.type === 'resultado_exame');
+  const resultDocs = (currentDocs || []).filter(d => d.type === 'resultado_exame');
   const container = document.getElementById('d-exames');
   if (!container) return;
 
-  // wire buttons every time the tab is rendered
-  const btnReq = document.getElementById('btn-new-exam-req');
-  if (btnReq) btnReq.onclick = () => openDocForm('exames', null);
   const btnRes = document.getElementById('btn-new-exam-res');
   if (btnRes) btnRes.onclick = () => openDocForm('resultado_exame', null);
 
-  if (!examDocs.length) {
-    container.innerHTML = `<div class="empty-state">Nenhum exame ou resultado registrado.</div>`;
+  if (!resultDocs.length) {
+    container.innerHTML = `<div class="empty-state">Nenhum resultado de exame registrado.</div>`;
     return;
   }
 
-  const TYPE_LABELS = { exames: 'Solicitação', resultado_exame: 'Resultado' };
-  const sections = [
-    { label: 'Solicitações de exames', filter: d => d.type === 'exames' },
-    { label: 'Resultados registrados',  filter: d => d.type === 'resultado_exame' }
-  ];
-
-  container.innerHTML = sections.map(({ label, filter }) => {
-    const items = examDocs.filter(filter);
-    if (!items.length) return '';
+  container.innerHTML = resultDocs.map(d => {
+    const signed = !!d.is_signed;
+    const signedAt = d.signed_at ? ` · Assinado em ${fmtDate(d.signed_at)}` : '';
+    const pendingBadge = !signed
+      ? `<span style="font-size:0.7rem;background:#fff8e6;color:#8a5c00;border:1px solid #f0d080;padding:2px 7px;margin-left:6px;">pendente</span>`
+      : `<span style="font-size:0.7rem;background:#f0faf5;color:#2d6a4f;border:1px solid #a0d4b8;padding:2px 7px;margin-left:6px;" title="Assinado digitalmente${signedAt}">✓ assinado</span>`;
+    const c = d.content || {};
+    const subtitle = c.exam_name ? `<span style="font-size:0.82rem;color:var(--steel);margin-left:8px;">${escapeHtml(c.exam_name)}</span>` : '';
     return `
-      <h4 class="section-title">${label}</h4>
-      ${items.map(d => {
-        const signed = !!d.is_signed;
-        const signedAt = d.signed_at ? ` · Assinado em ${fmtDate(d.signed_at)}` : '';
-        const pendingBadge = !signed
-          ? `<span style="font-size:0.7rem;background:#fff8e6;color:#8a5c00;border:1px solid #f0d080;padding:2px 7px;margin-left:6px;">pendente</span>`
-          : `<span style="font-size:0.7rem;background:#f0faf5;color:#2d6a4f;border:1px solid #a0d4b8;padding:2px 7px;margin-left:6px;" title="Assinado digitalmente${signedAt}">✓ assinado</span>`;
-        return `
-        <div class="doc-row" data-exam-id="${d.id}">
-          <div class="doc-date">${fmtDate(d.issue_date)}</div>
-          <div><span class="doc-type-badge ${d.type}">${TYPE_LABELS[d.type] || d.type}</span>${pendingBadge}</div>
-          <div>${escapeHtml(d.title || '—')}</div>
-          <div class="doc-actions">
-            ${!signed ? `<button class="btn-ghost" data-act="edit">Editar</button>` : `<span style="font-size:0.75rem;color:var(--gray);padding:0 4px;" title="Documento assinado — edição bloqueada">🔒</span>`}
-            <button class="btn-ghost" data-act="pdf">PDF</button>
-            ${!signed ? `<button class="btn-ghost" data-act="del" style="color:var(--danger)">Excluir</button>` : ''}
-          </div>
-        </div>`;
-      }).join('')}`;
+      <div class="doc-row" data-exam-id="${d.id}">
+        <div class="doc-date">${fmtDate(d.issue_date)}</div>
+        <div><span class="doc-type-badge resultado_exame">Resultado</span>${pendingBadge}</div>
+        <div>${escapeHtml(d.title || '—')}${subtitle}</div>
+        <div class="doc-actions">
+          ${!signed ? `<button class="btn-ghost" data-act="edit">Editar</button>` : `<span style="font-size:0.75rem;color:var(--gray);padding:0 4px;" title="Documento assinado — edição bloqueada">🔒</span>`}
+          <button class="btn-ghost" data-act="pdf">PDF</button>
+          ${!signed ? `<button class="btn-ghost" data-act="del" style="color:var(--danger)">Excluir</button>` : ''}
+        </div>
+      </div>`;
   }).join('');
 
   container.querySelectorAll('.doc-row[data-exam-id]').forEach(row => {
-    const d = examDocs.find(x => x.id === row.dataset.examId);
+    const d = resultDocs.find(x => x.id === row.dataset.examId);
     if (!d) return;
     const editBtn = row.querySelector('[data-act="edit"]');
     if (editBtn) editBtn.onclick = () => openDocForm(d.type, d);
@@ -3481,7 +3467,7 @@ function wireExamRemovers(m) {
 function pdfHeader(doc, label) {
   const W = 210, M = 18;
   // Barra dourada fina no topo
-  doc.setFillColor(13, 27, 42);
+  doc.setFillColor(184, 154, 94);
   doc.rect(0, 0, W, 2.5, 'F');
   // Label (tipo de documento) em dourado
   doc.setTextColor(184, 154, 94);
