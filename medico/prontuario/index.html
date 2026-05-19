@@ -1640,23 +1640,28 @@ function openConsultForm(c) {
         if (el) el.textContent = msg;
       };
 
-      const autoSave = async () => {
-        if (!modal.isConnected) return;
+      // Lógica central de save — funciona mesmo após o modal sair do DOM
+      const savePayload = async () => {
         const payload = collectPayload();
         if (!payload) return;
+        if (!draftId) {
+          const { data, error } = await sb.from('emr_consultations').insert(payload).select().single();
+          if (error) throw error;
+          draftId = data.id;
+          currentConsults.unshift(data);
+        } else {
+          const { data, error } = await sb.from('emr_consultations')
+            .update(payload).eq('id', draftId).select().single();
+          if (error) throw error;
+          const idx = currentConsults.findIndex(x => x.id === draftId);
+          if (idx >= 0) currentConsults[idx] = data;
+        }
+      };
+
+      const autoSave = async () => {
+        if (!modal.isConnected) return;
         try {
-          if (!draftId) {
-            const { data, error } = await sb.from('emr_consultations').insert(payload).select().single();
-            if (error) throw error;
-            draftId = data.id;
-            currentConsults.unshift(data);
-          } else {
-            const { data, error } = await sb.from('emr_consultations')
-              .update(payload).eq('id', draftId).select().single();
-            if (error) throw error;
-            const idx = currentConsults.findIndex(x => x.id === draftId);
-            if (idx >= 0) currentConsults[idx] = data;
-          }
+          await savePayload();
           const t = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
           setStatus(`Salvo automaticamente às ${t}`);
         } catch (err) {
@@ -1667,9 +1672,16 @@ function openConsultForm(c) {
 
       const autoSaveTimer = setInterval(autoSave, 30000);
 
-      // para o intervalo quando o modal fechar
+      // Ao fechar o modal: para o timer e, se for edição de consulta existente,
+      // salva as alterações pendentes para não perder o que foi digitado.
       const asObs = new MutationObserver(() => {
-        if (!modal.isConnected) { clearInterval(autoSaveTimer); asObs.disconnect(); }
+        if (!modal.isConnected) {
+          clearInterval(autoSaveTimer);
+          asObs.disconnect();
+          if (!isNew && draftId) {
+            savePayload().then(() => { renderConsults(); renderSummary(); }).catch(() => {});
+          }
+        }
       });
       asObs.observe(document.body, { childList: true });
 
@@ -3349,8 +3361,8 @@ function wireExamRemovers(m) {
 =========================================================== */
 function pdfHeader(doc, label) {
   const W = 210, M = 18;
-  // Barra azul fina no topo
-  doc.setFillColor(13, 27, 42);
+  // Barra dourada fina no topo
+  doc.setFillColor(184, 154, 94);
   doc.rect(0, 0, W, 2.5, 'F');
   // Label (tipo de documento) em dourado
   doc.setTextColor(184, 154, 94);
