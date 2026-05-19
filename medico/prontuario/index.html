@@ -3349,23 +3349,36 @@ function wireExamRemovers(m) {
 =========================================================== */
 function pdfHeader(doc, label) {
   const W = 210, M = 18;
-  doc.setFillColor(13, 27, 42);
-  doc.rect(0, 0, W, 32, 'F');
-  doc.setTextColor(212, 185, 122);
-  doc.setFontSize(9);
-  doc.text(label.toUpperCase(), M, 11);
-  doc.setTextColor(245, 242, 238);
-  doc.setFontSize(15);
-  doc.text(DOCTOR_NAME, M, 21);
-  doc.setFontSize(9);
-  doc.setTextColor(200, 216, 232);
-  doc.text(`${DOCTOR_TITLE} · ${DOCTOR_CRM}${DOCTOR_RQE ? ' · ' + DOCTOR_RQE : ''}`, M, 27);
+  // Barra dourada fina no topo
+  doc.setFillColor(184, 154, 94);
+  doc.rect(0, 0, W, 2.5, 'F');
+  // Label (tipo de documento) em dourado
+  doc.setTextColor(184, 154, 94);
   doc.setFontSize(8);
-  doc.text(docCity(), W - M, 11, { align: 'right' });
-  doc.text(DOCTOR_EMAIL, W - M, 16, { align: 'right' });
-  doc.text(DOCTOR_SITE, W - M, 21, { align: 'right' });
+  doc.setFont('helvetica', 'bold');
+  doc.text(label.toUpperCase(), M, 11);
+  // Nome do médico em navy
   doc.setTextColor(13, 27, 42);
-  return 42; // y inicial
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text(DOCTOR_NAME, M, 20);
+  // Credenciais em cinza-azulado
+  doc.setFontSize(8.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(60, 85, 115);
+  doc.text(`${DOCTOR_TITLE} · ${DOCTOR_CRM}${DOCTOR_RQE ? ' · ' + DOCTOR_RQE : ''}`, M, 26);
+  // Informações de contato à direita
+  doc.setFontSize(8);
+  doc.setTextColor(90, 110, 135);
+  doc.text(docCity(), W - M, 11, { align: 'right' });
+  doc.text(DOCTOR_EMAIL, W - M, 17, { align: 'right' });
+  doc.text(DOCTOR_SITE, W - M, 23, { align: 'right' });
+  // Linha divisória
+  doc.setDrawColor(184, 154, 94);
+  doc.setLineWidth(0.4);
+  doc.line(M, 30, W - M, 30);
+  doc.setTextColor(13, 27, 42);
+  return 40; // y inicial
 }
 
 function pdfPatientBlock(doc, y, p) {
