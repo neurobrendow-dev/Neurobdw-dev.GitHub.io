@@ -234,6 +234,7 @@ permalink: /medico/prontuario/
   .doc-type-badge.atestado { background: #f0e6f7; color: #6a3aa3; }
   .doc-type-badge.laudo { background: #fdecea; color: #a33; }
   .doc-type-badge.relatorio { background: #f5f2ee; color: var(--navy); }
+  .doc-type-badge.resultado_exame { background: #e8f4fd; color: #1a5276; }
   .doc-actions { display: flex; gap: 6px; }
   @media (max-width: 720px) {
     .doc-row { grid-template-columns: 1fr; gap: 4px; padding: 12px; }
@@ -427,6 +428,7 @@ permalink: /medico/prontuario/
       <button class="tab-btn active" data-tab="resumo">Resumo</button>
       <button class="tab-btn" data-tab="historico">Histórico médico</button>
       <button class="tab-btn" data-tab="consultas">Consultas</button>
+      <button class="tab-btn" data-tab="exames">Exames Complementares</button>
       <button class="tab-btn" data-tab="documentos">Documentos</button>
     </div>
 
@@ -497,6 +499,15 @@ permalink: /medico/prontuario/
         <button class="btn-primary" id="btn-new-consult">+ Nova consulta</button>
       </div>
       <div id="d-consults"></div>
+    </div>
+
+    <!-- TAB EXAMES COMPLEMENTARES -->
+    <div class="tab-panel" data-tab="exames">
+      <div class="btn-row" style="margin-bottom:16px;gap:8px;">
+        <button class="btn-primary" id="btn-new-exam-req">+ Nova solicitação</button>
+        <button class="btn-secondary" id="btn-new-exam-res">+ Registrar resultado</button>
+      </div>
+      <div id="d-exames"></div>
     </div>
 
     <!-- TAB DOCUMENTOS -->
@@ -1227,6 +1238,7 @@ async function openPatient(id) {
   fillHistoryForm();
   renderConsults();
   renderDocs();
+  renderExames();
 }
 
 function renderSummary() {
@@ -1317,6 +1329,75 @@ function switchTab(name) {
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tab === name));
   if (name === 'documentos') renderPendingSignatures();
+  if (name === 'exames') renderExames();
+}
+
+function renderExames() {
+  const examDocs = (currentDocs || []).filter(d => d.type === 'exames' || d.type === 'resultado_exame');
+  const container = document.getElementById('d-exames');
+  if (!container) return;
+
+  // wire buttons every time the tab is rendered
+  const btnReq = document.getElementById('btn-new-exam-req');
+  if (btnReq) btnReq.onclick = () => openDocForm('exames', null);
+  const btnRes = document.getElementById('btn-new-exam-res');
+  if (btnRes) btnRes.onclick = () => openDocForm('resultado_exame', null);
+
+  if (!examDocs.length) {
+    container.innerHTML = `<div class="empty-state">Nenhum exame ou resultado registrado.</div>`;
+    return;
+  }
+
+  const TYPE_LABELS = { exames: 'Solicitação', resultado_exame: 'Resultado' };
+  const sections = [
+    { label: 'Solicitações de exames', filter: d => d.type === 'exames' },
+    { label: 'Resultados registrados',  filter: d => d.type === 'resultado_exame' }
+  ];
+
+  container.innerHTML = sections.map(({ label, filter }) => {
+    const items = examDocs.filter(filter);
+    if (!items.length) return '';
+    return `
+      <h4 class="section-title">${label}</h4>
+      ${items.map(d => {
+        const signed = !!d.is_signed;
+        const signedAt = d.signed_at ? ` · Assinado em ${fmtDate(d.signed_at)}` : '';
+        const pendingBadge = !signed
+          ? `<span style="font-size:0.7rem;background:#fff8e6;color:#8a5c00;border:1px solid #f0d080;padding:2px 7px;margin-left:6px;">pendente</span>`
+          : `<span style="font-size:0.7rem;background:#f0faf5;color:#2d6a4f;border:1px solid #a0d4b8;padding:2px 7px;margin-left:6px;" title="Assinado digitalmente${signedAt}">✓ assinado</span>`;
+        return `
+        <div class="doc-row" data-exam-id="${d.id}">
+          <div class="doc-date">${fmtDate(d.issue_date)}</div>
+          <div><span class="doc-type-badge ${d.type}">${TYPE_LABELS[d.type] || d.type}</span>${pendingBadge}</div>
+          <div>${escapeHtml(d.title || '—')}</div>
+          <div class="doc-actions">
+            ${!signed ? `<button class="btn-ghost" data-act="edit">Editar</button>` : `<span style="font-size:0.75rem;color:var(--gray);padding:0 4px;" title="Documento assinado — edição bloqueada">🔒</span>`}
+            <button class="btn-ghost" data-act="pdf">PDF</button>
+            ${!signed ? `<button class="btn-ghost" data-act="del" style="color:var(--danger)">Excluir</button>` : ''}
+          </div>
+        </div>`;
+      }).join('')}`;
+  }).join('');
+
+  container.querySelectorAll('.doc-row[data-exam-id]').forEach(row => {
+    const d = examDocs.find(x => x.id === row.dataset.examId);
+    if (!d) return;
+    const editBtn = row.querySelector('[data-act="edit"]');
+    if (editBtn) editBtn.onclick = () => openDocForm(d.type, d);
+    const pdfBtn = row.querySelector('[data-act="pdf"]');
+    if (pdfBtn) pdfBtn.onclick = async () => {
+      if (d.is_signed) await applyReplayStamp('emr_documents', d.id);
+      generateDocPDF(d);
+    };
+    const delBtn = row.querySelector('[data-act="del"]');
+    if (delBtn) delBtn.onclick = async () => {
+      if (!confirm('Excluir este documento?')) return;
+      const { error } = await sb.from('emr_documents').delete().eq('id', d.id);
+      if (error) return alertErr(error);
+      currentDocs = currentDocs.filter(x => x.id !== d.id);
+      renderDocs(); renderExames(); renderSummary();
+    };
+  });
 }
 
 /* ===========================================================
@@ -1454,7 +1535,7 @@ function openConsultForm(c) {
     size: 'lg',
     bodyHTML: patientBanner + `
       <form id="form-consult">
-        <div class="form-row cols-3">
+        <div class="form-row cols-2">
           <div class="form-group">
             <label>Data e hora *</label>
             <input type="datetime-local" name="consultation_date" required
@@ -1468,10 +1549,6 @@ function openConsultForm(c) {
               <option value="urgencia" ${data.type==='urgencia'?'selected':''}>Urgência</option>
               <option value="teleconsulta" ${data.type==='teleconsulta'?'selected':''}>Teleconsulta</option>
             </select>
-          </div>
-          <div class="form-group">
-            <label>Retorno em</label>
-            <input name="return_in" placeholder="ex: 30 dias" value="${escapeHtml(data.return_in || '')}">
           </div>
         </div>
         <div class="form-row">
@@ -1545,6 +1622,12 @@ function openConsultForm(c) {
               <button type="button" class="btn-ghost ai-btn" data-ai="notes" style="float:right;font-size:0.7rem;">✨ IA</button>
             </label>
             <textarea name="notes">${escapeHtml(data.notes || '')}</textarea>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Retorno em</label>
+            <input name="return_in" placeholder="ex: 30 dias, 3 meses" value="${escapeHtml(data.return_in || '')}">
           </div>
         </div>
       </form>
@@ -2278,7 +2361,7 @@ function renderDocs() {
   const TYPE_LABELS = {
     receita_simples:'Receita simples', receita_especial:'Receita especial',
     exames:'Solicitação de exames', atestado:'Atestado',
-    laudo:'Laudo', relatorio:'Relatório'
+    laudo:'Laudo', relatorio:'Relatório', resultado_exame:'Resultado de exame'
   };
   setHTML('d-docs', currentDocs.map(d => {
     const signed = !!d.is_signed;
@@ -2325,7 +2408,7 @@ function renderDocs() {
       const { error } = await sb.from('emr_documents').delete().eq('id', id);
       if (error) return alertErr(error);
       currentDocs = currentDocs.filter(x => x.id !== id);
-      renderDocs(); renderSummary();
+      renderDocs(); renderExames(); renderSummary();
     };
   });
   renderPendingSignatures();
@@ -2627,7 +2710,7 @@ async function openGlobalPendingModal() {
     allBtns.textContent = `✓ Concluído — ${ok} assinado(s)${fail ? `, ${fail} falha(s)` : ''}`;
     showToast(`${ok} documento(s) assinado(s) digitalmente — ICP-Brasil ✓`);
     refreshGlobalPendingCount();
-    if (currentPatient) { renderDocs(); renderConsults(); renderPendingSignatures(); }
+    if (currentPatient) { renderDocs(); renderExames(); renderConsults(); renderPendingSignatures(); }
   };
 }
 
@@ -2847,6 +2930,40 @@ function openDocForm(type, doc) {
     getContent = (m) => ({ body: m.querySelector('#rel-body').value.trim() });
   }
 
+  else if (type === 'resultado_exame') {
+    defaultTitle = 'Resultado de exame';
+    bodyHTML = `
+      <div class="form-row cols-2">
+        <div class="form-group">
+          <label>Nome do exame</label>
+          <input id="re-exam-name" placeholder="ex: RNM de crânio, EEG, ENMG…" value="${escapeHtml(c.exam_name || '')}">
+        </div>
+        <div class="form-group">
+          <label>Local / laboratório</label>
+          <input id="re-lab" placeholder="ex: Hospital das Clínicas" value="${escapeHtml(c.lab || '')}">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Resultado / laudo do exame</label>
+          <textarea id="re-result" style="min-height:200px;" placeholder="Transcreva ou resuma o resultado do exame.">${escapeHtml(c.result || '')}</textarea>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Interpretação clínica</label>
+          <textarea id="re-interp" style="min-height:100px;" placeholder="Impressão diagnóstica e correlação com o quadro clínico.">${escapeHtml(c.interpretation || '')}</textarea>
+        </div>
+      </div>
+    `;
+    getContent = (m) => ({
+      exam_name:      m.querySelector('#re-exam-name').value.trim(),
+      lab:            m.querySelector('#re-lab').value.trim(),
+      result:         m.querySelector('#re-result').value.trim(),
+      interpretation: m.querySelector('#re-interp').value.trim()
+    });
+  }
+
   const titleInputHTML = `
     <div class="form-row">
       <div class="form-group">
@@ -3029,7 +3146,7 @@ function openDocForm(type, doc) {
             }
             console.log('[btn-save-doc] Supabase OK');
             closeModal();
-            renderDocs();
+            renderDocs(); renderExames();
             renderSummary();
           } catch (err) {
             console.error('[btn-save-doc] Supabase falhou:', err);
@@ -3074,7 +3191,7 @@ function openDocForm(type, doc) {
           sigState.pendingSourceId    = saved.id;
           generateDocPDF(saved);
           closeModal();
-          renderDocs();
+          renderDocs(); renderExames();
           renderSummary();
         } catch (err) {
           alertErr(err);
@@ -3364,7 +3481,7 @@ function wireExamRemovers(m) {
 function pdfHeader(doc, label) {
   const W = 210, M = 18;
   // Barra dourada fina no topo
-  doc.setFillColor(13, 27, 42);
+  doc.setFillColor(184, 154, 94);
   doc.rect(0, 0, W, 2.5, 'F');
   // Label (tipo de documento) em dourado
   doc.setTextColor(184, 154, 94);
@@ -3948,7 +4065,7 @@ async function pdfSave(doc, filename) {
           if (sourceTable === 'emr_documents') {
             const d = currentDocs.find(x => x.id === sourceId);
             if (d) { d.is_signed = true; d.signed_at = new Date().toISOString(); }
-            if (!silentMode) { renderDocs(); renderPendingSignatures(); }
+            if (!silentMode) { renderDocs(); renderExames(); renderPendingSignatures(); }
           } else if (sourceTable === 'emr_consultations') {
             const c = currentConsults.find(x => x.id === sourceId);
             if (c) { c.is_signed = true; c.signed_at = new Date().toISOString(); }
@@ -4074,7 +4191,8 @@ function generateDocPDF(d) {
     exames:'Solicitação de Exames',
     atestado:'Atestado Médico',
     laudo:'Laudo Médico',
-    relatorio:'Relatório Médico'
+    relatorio:'Relatório Médico',
+    resultado_exame:'Resultado de Exame'
   };
   const label = TYPE_LABELS[d.type] || 'Documento';
 
@@ -4090,7 +4208,59 @@ function generateDocPDF(d) {
     pdfLaudo(d, label);
   } else if (d.type === 'relatorio') {
     pdfRelatorio(d, label);
+  } else if (d.type === 'resultado_exame') {
+    pdfResultadoExame(d, label);
   }
+}
+
+function pdfResultadoExame(d, label) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const M = 18, W = 210;
+  let y = pdfHeader(doc, label);
+  if (currentPatient) y = pdfPatientBlock(doc, y, currentPatient);
+
+  const c = d.content || {};
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(13, 27, 42);
+  doc.text(escapeHtml(d.title || 'Resultado de exame'), M, y); y += 6;
+
+  if (c.exam_name) {
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+    doc.text('Exame:', M, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(c.exam_name, M + 14, y); y += 5;
+  }
+  if (c.lab) {
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+    doc.text('Local:', M, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(c.lab, M + 14, y); y += 5;
+  }
+  if (d.issue_date) {
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold');
+    doc.text('Data:', M, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(fmtDate(d.issue_date), M + 14, y); y += 7;
+  }
+
+  if (c.result) {
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(13, 27, 42);
+    doc.text('Resultado', M, y); y += 5;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    y = pdfWrappedText(doc, c.result, M, y, W - M * 2) + 6;
+  }
+  if (c.interpretation) {
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(13, 27, 42);
+    doc.text('Interpretação clínica', M, y); y += 5;
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    y = pdfWrappedText(doc, c.interpretation, M, y, W - M * 2) + 6;
+  }
+
+  pdfFooter(doc);
+  const safe = (currentPatient?.full_name || 'paciente').toLowerCase().replace(/\s+/g, '-');
+  pdfSave(doc, `resultado-exame-${safe}-${d.issue_date || 'sem-data'}.pdf`);
 }
 
 function getMedicationPrintGroups(content) {
